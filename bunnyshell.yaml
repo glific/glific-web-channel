@@ -1,0 +1,141 @@
+# Bunnyshell environment for the Glific web-channel demo.
+#
+# Four components: a Postgres database, the Glific backend (Elixir/Phoenix), the
+# web-channel widget (this repo), and the staff console (glific-frontend). Each app
+# component builds from its OWN git repo/branch, so this single file assembles three
+# repositories into one shareable preview environment.
+#
+# ── How the pieces find each other ─────────────────────────────────────────────
+#   • App → DB: internal Kubernetes DNS = the component name. The backend reaches
+#     Postgres at host `db` on 5432 (no public URL involved).
+#   • Frontend → backend: each component gets a public URL. We reference the backend's
+#     BARE hostname via `{{ components.backend.ingress.hosts[0].hostname }}` and build the
+#     scheme/path ourselves. Vite inlines these at BUILD time, so they are `build.args`.
+#   • Backend trust: BACKEND_HOST makes GlificWeb.SubdomainPlug resolve the seeded "glific"
+#     org (see config/dev.exs), and CHECK_ORIGIN allow-lists the two frontends so their
+#     WebSocket handshakes pass Phoenix's check_origin.
+#
+# ── Before deploying ───────────────────────────────────────────────────────────
+#   1. Push each branch to the remote Bunnyshell is connected to (it cannot see local
+#      commits): glific @ web-channel-prototype, glific-frontend @ web-channel-prototype,
+#      and this repo once it has a remote.
+#   2. Fill the SECRET[...] values with `bns secrets encrypt` (DB password + Oban Pro
+#      FP/AUTH_KEY — the backend Dockerfile fetches deps from getoban.pro).
+#   3. Confirm the backend build-arg VERSIONS below match your working local docker build
+#      (the Dockerfile ARGs have no defaults). Best-guess values are marked CONFIRM.
+kind: Environment
+name: glific-web-channel-demo
+type: primary
+
+environmentVariables:
+  POSTGRES_DB: glific_dev
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: 'SECRET[replace-with-bns-encrypted-value]'
+  # Oban Pro credentials — required to fetch backend deps at image build time.
+  OBAN_FINGERPRINT: 'SECRET[replace-with-bns-encrypted-value]'
+  OBAN_AUTH_KEY: 'SECRET[replace-with-bns-encrypted-value]'
+
+components:
+  # ── Postgres ──────────────────────────────────────────────────────────────
+  - kind: Database
+    name: db
+    dockerCompose:
+      image: 'postgres:15-alpine'
+      environment:
+        POSTGRES_DB: '{{ env.vars.POSTGRES_DB }}'
+        POSTGRES_USER: '{{ env.vars.POSTGRES_USER }}'
+        POSTGRES_PASSWORD: '{{ env.vars.POSTGRES_PASSWORD }}'
+      ports:
+        - '5432:5432'
+
+  # ── Glific backend (Elixir/Phoenix) ─────────────────────────────────────────
+  - kind: Application
+    name: backend
+    gitRepo: 'https://github.com/glific/glific.git'
+    gitBranch: web-channel-prototype
+    dockerCompose:
+      build:
+        context: .
+        dockerfile: Dockerfile
+        args:
+          # CONFIRM these match your local `docker build` (Dockerfile ARGs have no defaults).
+          ELIXIR_VERSION: '1.18.3'
+          ERLANG_VERSION: '27.3.3'
+          ALPINE_VERSION: '3.20.3'
+          NODE_VERSION: '22'
+          POSTGRES_VERSION: '14'
+          # Oban Pro (getoban.pro) — FP is the public-key fingerprint, AUTH_KEY the token.
+          FP: '{{ env.vars.OBAN_FINGERPRINT }}'
+          AUTH_KEY: '{{ env.vars.OBAN_AUTH_KEY }}'
+      environment:
+        # Tenant + origin wiring consumed by config/dev.exs.
+        BACKEND_HOST: '{{ components.backend.ingress.hosts[0].hostname }}'
+        CHECK_ORIGIN: 'https://{{ components.widget.ingress.hosts[0].hostname }},https://{{ components.staff.ingress.hosts[0].hostname }}'
+        PORT: '4000'
+        # Points the dev Repo config at the `db` component instead of localhost.
+        DATABASE_HOST: db
+        DATABASE_PORT: '5432'
+        DATABASE_USER: '{{ env.vars.POSTGRES_USER }}'
+        DATABASE_PASSWORD: '{{ env.vars.POSTGRES_PASSWORD }}'
+        DATABASE_NAME: '{{ env.vars.POSTGRES_DB }}'
+      ports:
+        - '4000:4000'
+    hosts:
+      - hostname: glific-backend
+        path: /
+        servicePort: 4000
+        public: true
+    dependsOn:
+      - db
+
+  # ── Web-channel widget (this repo) ──────────────────────────────────────────
+  - kind: Application
+    name: widget
+    gitRepo: 'https://github.com/glific/glific-web-channel.git' # CONFIRM once the remote exists
+    gitBranch: web-channel-prototype
+    dockerCompose:
+      build:
+        context: .
+        dockerfile: Dockerfile
+        args:
+          # Absolute URLs baked into the bundle (no dev proxy in the container).
+          VITE_GLIFIC_API_URL: 'https://{{ components.backend.ingress.hosts[0].hostname }}/api'
+          VITE_WEB_SOCKET: 'wss://{{ components.backend.ingress.hosts[0].hostname }}/web_socket'
+      ports:
+        - '80:80'
+    hosts:
+      - hostname: glific-widget
+        path: /
+        servicePort: 80
+        public: true
+    dependsOn:
+      - backend
+
+  # ── Staff console (glific-frontend) ─────────────────────────────────────────
+  - kind: Application
+    name: staff
+    gitRepo: 'https://github.com/glific/glific-frontend.git'
+    gitBranch: web-channel-prototype
+    dockerCompose:
+      build:
+        context: .
+        dockerfile: Dockerfile
+        args:
+          # config/index.ts treats this as a BARE hostname (prepends https, appends /api|/socket).
+          VITE_GLIFIC_BACKEND_URL: '{{ components.backend.ingress.hosts[0].hostname }}'
+      ports:
+        - '80:80'
+    hosts:
+      - hostname: glific-staff
+        path: /
+        servicePort: 80
+        public: true
+    dependsOn:
+      - backend
+
+volumes:
+  - name: pg-data
+    mount:
+      component: db
+      containerPath: /var/lib/postgresql/data
+    size: 2Gi
