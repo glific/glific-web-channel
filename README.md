@@ -1,0 +1,77 @@
+# Glific Web Channel
+
+Standalone front-end for the Glific **web channel** — a public, WhatsApp-style chat app
+that end users open in a browser to converse with an NGO running on Glific. It is a
+dedicated SPA (deployed at e.g. `web.<org>.glific.com`), fully decoupled from the Glific
+staff console (`glific-frontend`).
+
+It talks to the Glific backend over **REST** (OTP auth) and a **Phoenix websocket**
+(`/web_socket`) — there is no Apollo/GraphQL here.
+
+## Stack
+
+- **React 19 + Vite + TypeScript**
+- **Tailwind CSS v4** + **shadcn/ui** (Radix primitives)
+- **react-hook-form + zod** (forms/validation)
+- **phoenix** JS client (realtime), **axios** (REST)
+- **Vitest + React Testing Library** (tests)
+- Package manager: **yarn** · Node pinned via `.tool-versions` (22.23.1)
+
+## Getting started
+
+```bash
+yarn install
+yarn dev        # http://localhost:5173
+```
+
+The dev server proxies `/api` and `/web_socket` to the Glific backend on
+`http://localhost:4000` (see `vite.config.ts`). Start the backend first. The login OTP in
+the prototype is **9999**.
+
+### Scripts
+
+| Command | What |
+|---|---|
+| `yarn dev` | Start the Vite dev server (with backend proxy) |
+| `yarn build` | Typecheck (`tsc -b`) + production build to `dist/` |
+| `yarn test` | Run the Vitest suite once |
+| `yarn test:watch` | Watch mode |
+| `yarn lint` | Lint (oxlint) |
+
+## Configuration
+
+Endpoints are resolved in `src/config.ts`. In **dev** leave the env vars unset — relative
+paths + the Vite proxy handle everything. In **prod**, set (see `.env.example`):
+
+```
+VITE_GLIFIC_API_URL=https://api.<org>.glific.com/api
+VITE_WEB_SOCKET=wss://api.<org>.glific.com/web_socket
+```
+
+## Structure
+
+```
+src/
+  config.ts                  # backend endpoints (env-driven, relative defaults)
+  services/
+    webChannelSocket.ts      # phoenix socket: join, send, load-more, rename
+    webChannelAuth.ts        # OTP request/verify + localStorage session
+  routes/
+    Login.tsx                # phone -> OTP (react-hook-form + zod)
+    Chat.tsx                 # conversation: realtime, optimistic send, reverse-infinite scroll
+  components/
+    chat/MessageBubble.tsx   # WhatsApp-style bubble
+    chat/EditName.tsx        # inline contact rename
+    ui/                      # shadcn components (owned in-repo)
+  lib/
+    whatsapp.tsx             # safe WhatsApp-markup -> JSX + time formatting
+    utils.ts                 # shadcn cn()
+  App.tsx                    # routes (/login, /chat)
+  main.tsx                   # BrowserRouter entry
+```
+
+## Roadmap
+
+Built as an SPA now, structured so it can later be packaged as an **embeddable widget**
+(script/iframe snippet for third-party NGO sites) with Shadow-DOM / scoped-Tailwind style
+isolation — the shadcn "you own the component code" model makes that migration local.
