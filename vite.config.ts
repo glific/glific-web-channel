@@ -1,10 +1,11 @@
 /// <reference types="vitest/config" />
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // ESM-safe __dirname
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,29 +15,41 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@': path.resolve(dirname, './src'),
+      "@": path.resolve(dirname, "./src"),
     },
   },
   server: {
-    // Dev proxy so the standalone app can talk to the Glific backend (localhost:4000)
-    // same-origin — avoids CORS and lets the phoenix Socket resolve "/web_socket"
-    // against the dev server. Point these at your own backend as needed.
+    // Serve on glific.test over HTTPS using the same mkcert cert the backend/glific-frontend
+    // use (already trusted by the browser). This makes the browser's page Origin
+    // https://glific.test:5173 — which the backend's Phoenix check_origin trusts (it allows
+    // *.glific.test). Serving on localhost got the WS rejected ("Could not check origin"),
+    // and no proxy Origin-rewrite worked reliably in Vite 8 — a trusted page origin is the fix.
+    host: "glific.test",
+    allowedHosts: ["glific.test"],
+    https: {
+      cert: fs.readFileSync(path.resolve(dirname, "certs/glific.test.pem")),
+      key: fs.readFileSync(path.resolve(dirname, "certs/glific.test-key.pem")),
+    },
+    // Proxy to the Glific backend's HTTPS endpoint on :4001 (mkcert self-signed, so
+    // secure:false lets Node accept it). Same-origin from the app's perspective.
     proxy: {
-      '/api': {
-        target: 'http://localhost:4000',
+      "/api": {
+        target: "https://localhost:4001",
         changeOrigin: true,
+        secure: false,
       },
-      '/web_socket': {
-        target: 'ws://localhost:4000',
+      "/web_socket": {
+        target: "wss://localhost:4001",
         ws: true,
         changeOrigin: true,
+        secure: false,
       },
     },
   },
   test: {
-    environment: 'jsdom',
+    environment: "jsdom",
     globals: true,
-    setupFiles: './src/test/setup.ts',
+    setupFiles: "./src/test/setup.ts",
     css: false,
   },
 });
