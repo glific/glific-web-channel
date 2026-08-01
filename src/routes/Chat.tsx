@@ -124,8 +124,10 @@ export const Chat = () => {
       .finally(() => setLoadingMore(false));
   };
 
-  const handleSend = () => {
-    const body = draft.trim();
+  // Send a body as the contact's own inbound message. Shared by the composer and by tapping
+  // an interactive option (a tap replies with the option's title — see InteractiveMessage).
+  const sendBody = (raw: string) => {
+    const body = raw.trim();
     if (!body || !channelRef.current) return;
 
     // optimistic append: show the user's own message instantly.
@@ -140,12 +142,17 @@ export const Chat = () => {
     };
     seenIds.current.add(String(optimistic.id));
     setMessages((prev) => [...prev, optimistic]);
-    setDraft('');
     requestAnimationFrame(scrollToBottom);
 
     pushNewMessage(channelRef.current, body).catch(() => {
       // keep the optimistic bubble; the phoenix client auto-reconnects and the message is queued
     });
+  };
+
+  const handleSend = () => {
+    if (!draft.trim()) return;
+    sendBody(draft);
+    setDraft('');
   };
 
   const handleRename = (newName: string) => {
@@ -188,7 +195,7 @@ export const Chat = () => {
       >
         {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} onInteractiveReply={sendBody} />
         ))}
       </div>
 

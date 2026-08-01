@@ -2,6 +2,44 @@ import { Socket, Channel } from 'phoenix';
 
 import { WEB_SOCKET } from '@/config';
 
+// A single tappable option in a quick_reply / list message.
+export interface InteractiveOption {
+  type?: string;
+  title: string;
+  description?: string;
+}
+
+// The three interactive shapes Glific supports, as they arrive over the socket
+// (lowercase `type`, snake_case keys — the raw `interactive_content` map).
+export interface QuickReplyContent {
+  type: 'quick_reply';
+  content: {
+    type: string; // "text" | "image" | "video" | "file"
+    header?: string;
+    text?: string;
+    url?: string;
+    caption?: string;
+    filename?: string;
+  };
+  options: InteractiveOption[];
+}
+
+export interface ListContent {
+  type: 'list';
+  title?: string;
+  body?: string;
+  globalButtons?: { type?: string; title: string }[];
+  items: { title?: string; subtitle?: string; options: InteractiveOption[] }[];
+}
+
+export interface LocationRequestContent {
+  type: 'location_request_message';
+  body: { type?: string; text: string };
+  action?: { name?: string };
+}
+
+export type InteractiveContent = QuickReplyContent | ListContent | LocationRequestContent;
+
 export interface WebChannelMessage {
   id: number | string;
   body: string;
@@ -11,6 +49,9 @@ export interface WebChannelMessage {
   flow: 'inbound' | 'outbound';
   inserted_at: string;
   media?: unknown;
+  // Present (and non-empty) only for interactive messages; a plain text message
+  // carries an empty object `{}` here, so callers must check for a `type` key.
+  interactive_content?: InteractiveContent | Record<string, never> | null;
 }
 
 export interface ConnectHandlers {
