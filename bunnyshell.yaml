@@ -30,10 +30,6 @@ type: primary
 environmentVariables:
   POSTGRES_DB: glific_dev
   POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: 'SECRET[replace-with-bns-encrypted-value]'
-  # Oban Pro credentials — required to fetch backend deps at image build time.
-  OBAN_FINGERPRINT: 'SECRET[replace-with-bns-encrypted-value]'
-  OBAN_AUTH_KEY: 'SECRET[replace-with-bns-encrypted-value]'
 
 components:
   # ── Postgres ──────────────────────────────────────────────────────────────
@@ -53,6 +49,7 @@ components:
     name: backend
     gitRepo: 'https://github.com/glific/glific.git'
     gitBranch: web-channel-prototype
+    gitApplicationPath: "lib"
     dockerCompose:
       build:
         context: .
@@ -61,7 +58,7 @@ components:
           # CONFIRM these match your local `docker build` (Dockerfile ARGs have no defaults).
           ELIXIR_VERSION: '1.18.3'
           ERLANG_VERSION: '27.3.3'
-          ALPINE_VERSION: '3.20.3'
+          ALPINE_VERSION: '3.22.4'
           NODE_VERSION: '22'
           POSTGRES_VERSION: '14'
           # Oban Pro (getoban.pro) — FP is the public-key fingerprint, AUTH_KEY the token.
@@ -70,18 +67,17 @@ components:
       environment:
         # Tenant + origin wiring consumed by config/dev.exs.
         BACKEND_HOST: '{{ components.backend.ingress.hosts[0].hostname }}'
-        CHECK_ORIGIN: 'https://{{ components.widget.ingress.hosts[0].hostname }},https://{{ components.staff.ingress.hosts[0].hostname }}'
+        CHECK_ORIGIN: 'https://{{ components.web-channel.ingress.hosts[0].hostname }},https://{{ components.admin-console.ingress.hosts[0].hostname }}'
         PORT: '4000'
-        # Points the dev Repo config at the `db` component instead of localhost.
-        DATABASE_HOST: db
-        DATABASE_PORT: '5432'
-        DATABASE_USER: '{{ env.vars.POSTGRES_USER }}'
-        DATABASE_PASSWORD: '{{ env.vars.POSTGRES_PASSWORD }}'
-        DATABASE_NAME: '{{ env.vars.POSTGRES_DB }}'
+        DATABASE_URL: 'ecto://{{ env.vars.POSTGRES_USER }}:{{ env.vars.POSTGRES_PASSWORD }}@db:5432/{{ env.vars.POSTGRES_DB }}'
+        READ_REPLICA_DATABASE_URL: 'ecto://{{ env.vars.POSTGRES_USER }}:{{ env.vars.POSTGRES_PASSWORD }}@db:5432/{{ env.vars.POSTGRES_DB }}'
+        BASE_URL: '{{ components.backend.ingress.hosts[0].hostname }}'
+        REQUEST_ORIGIN: 'https://{{ components.backend.ingress.hosts[0].hostname }}'
+        REQUEST_ORIGIN_WILDCARD: '//*.bunnyenv.com'
       ports:
         - '4000:4000'
     hosts:
-      - hostname: glific-backend
+      - hostname: 'glific-backend-{{env.unique}}.bunnyenv.com'
         path: /
         servicePort: 4000
         public: true
@@ -90,9 +86,10 @@ components:
 
   # ── Web-channel widget (this repo) ──────────────────────────────────────────
   - kind: Application
-    name: widget
+    name: web-channel
     gitRepo: 'https://github.com/glific/glific-web-channel.git' # CONFIRM once the remote exists
     gitBranch: web-channel-prototype
+    gitApplicationPath: "src"
     dockerCompose:
       build:
         context: .
@@ -104,18 +101,19 @@ components:
       ports:
         - '80:80'
     hosts:
-      - hostname: glific-widget
+      - hostname: 'glific-web-{{env.unique}}.bunnyenv.com'
         path: /
         servicePort: 80
         public: true
     dependsOn:
       - backend
 
-  # ── Staff console (glific-frontend) ─────────────────────────────────────────
+  # ── Admin console (glific-frontend) ─────────────────────────────────────────
   - kind: Application
-    name: staff
+    name: admin-console
     gitRepo: 'https://github.com/glific/glific-frontend.git'
     gitBranch: web-channel-prototype
+    gitApplicationPath: "src"
     dockerCompose:
       build:
         context: .
@@ -126,7 +124,7 @@ components:
       ports:
         - '80:80'
     hosts:
-      - hostname: glific-staff
+      - hostname: 'glific-console-{{env.unique}}.bunnyenv.com'
         path: /
         servicePort: 80
         public: true
@@ -135,6 +133,7 @@ components:
 
 volumes:
   - name: pg-data
+    type: disk
     mount:
       component: db
       containerPath: /var/lib/postgresql/data
