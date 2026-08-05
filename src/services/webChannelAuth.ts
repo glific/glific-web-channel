@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
+import { WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP, WEB_CHANNEL_UPLOAD } from '@/config';
 
 // Dedicated storage key for the public web-channel end-user session.
 const WEB_CHANNEL_SESSION_KEY = 'web_channel_session';
@@ -54,3 +54,25 @@ export const requestOtp = (phone: string) => axios.post(WEB_CHANNEL_REQUEST_OTP,
 
 // verify an OTP; resolves with { token, contact_id, name, phone } on success, rejects with 401 on failure
 export const verifyOtp = (phone: string, otp: string) => axios.post(WEB_CHANNEL_VERIFY_OTP, { phone, otp });
+
+export interface UploadedMedia {
+  url: string;
+  content_type: string | null;
+}
+
+// upload a picked file (multipart) and resolve with its hosted URL. Authenticated with the
+// stored contact token — the server resolves the org from the token, not the request body.
+export const uploadMedia = async (file: File): Promise<UploadedMedia> => {
+  const token = getWebChannelToken();
+  const extension = file.name.includes('.') ? file.name.split('.').pop() : '';
+
+  const form = new FormData();
+  form.append('media', file);
+  form.append('extension', extension ?? '');
+
+  const { data } = await axios.post(WEB_CHANNEL_UPLOAD, form, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return data.data as UploadedMedia;
+};

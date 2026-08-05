@@ -19,3 +19,6 @@ export const ORGANIZATION_NAME = `${API_BASE}/v1/session/name`;
 // Public OTP auth endpoints (prototype: server does not actually send an SMS).
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;
 export const WEB_CHANNEL_VERIFY_OTP = `${API_BASE}/v1/web_channel/verify-otp`;
+
+// Media upload endpoint (contact-token authed). Returns the hosted URL for the uploaded file.
+export const WEB_CHANNEL_UPLOAD = `${API_BASE}/v1/web_channel/upload`;

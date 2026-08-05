@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   connectAndJoin,
   pushNewMessage,
+  pushNewMediaMessage,
+  pushNewLocationMessage,
   pushLoadMore,
   pushUpdateName,
   disconnect,
@@ -88,6 +90,24 @@ describe('webChannelSocket', () => {
 
     expect(mockChannel.push).toHaveBeenCalledWith('new_message', { body: 'hi there' });
     expect(reply).toEqual({ status: 'sent' });
+  });
+
+  it('pushNewMediaMessage pushes the media payload and resolves on ok', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ ok: { status: 'sent' } }));
+
+    const media = { type: 'audio' as const, url: 'https://cdn/x.mp3', content_type: 'audio/mpeg', filename: 'x.mp3' };
+    const reply = await pushNewMediaMessage(mockChannel as any, media);
+
+    expect(mockChannel.push).toHaveBeenCalledWith('new_media_message', media);
+    expect(reply).toEqual({ status: 'sent' });
+  });
+
+  it('pushNewLocationMessage pushes lat/lng and resolves on ok', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ ok: {} }));
+
+    await pushNewLocationMessage(mockChannel as any, { latitude: 12.9, longitude: 77.5 });
+
+    expect(mockChannel.push).toHaveBeenCalledWith('new_location_message', { latitude: 12.9, longitude: 77.5 });
   });
 
   it('pushLoadMore pushes the offset and resolves the older page', async () => {

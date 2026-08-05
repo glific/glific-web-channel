@@ -40,6 +40,16 @@ export interface LocationRequestContent {
 
 export type InteractiveContent = QuickReplyContent | ListContent | LocationRequestContent;
 
+// The media payload as it arrives on a message over the socket (the serializer emits `{ url }`;
+// content_type is filled in for optimistic bubbles the widget builds locally).
+export interface WebChannelMedia {
+  url: string;
+  content_type?: string | null;
+}
+
+// The media message types a browser contact can send inbound (mirrors the backend whitelist).
+export type OutboundMediaType = 'image' | 'audio' | 'video' | 'document';
+
 export interface WebChannelMessage {
   id: number | string;
   body: string;
@@ -48,7 +58,7 @@ export interface WebChannelMessage {
   // "outbound" = from the NGO/flow (render left/received).
   flow: 'inbound' | 'outbound';
   inserted_at: string;
-  media?: unknown;
+  media?: WebChannelMedia | null;
   // Present (and non-empty) only for interactive messages; a plain text message
   // carries an empty object `{}` here, so callers must check for a `type` key.
   interactive_content?: InteractiveContent | Record<string, never> | null;
@@ -118,6 +128,38 @@ export const pushNewMessage = (channel: Channel, body: string): Promise<unknown>
       .receive('ok', resolve)
       .receive('error', reject)
       .receive('timeout', () => reject(new Error('new_message timeout')));
+  });
+
+// push an already-uploaded media message (audio/video/image/document). The file bytes are NOT
+// sent here — they were uploaded via the REST endpoint first; this carries only the hosted url.
+export interface OutboundMedia {
+  type: OutboundMediaType;
+  url: string;
+  content_type?: string | null;
+  filename?: string;
+  caption?: string;
+}
+
+export const pushNewMediaMessage = (channel: Channel, media: OutboundMedia): Promise<unknown> =>
+  new Promise((resolve, reject) => {
+    channel
+      .push('new_media_message', media)
+      .receive('ok', resolve)
+      .receive('error', reject)
+      .receive('timeout', () => reject(new Error('new_media_message timeout')));
+  });
+
+// push the contact's current location (latitude/longitude); resolves on the server ":ok" reply
+export const pushNewLocationMessage = (
+  channel: Channel,
+  coords: { latitude: number; longitude: number }
+): Promise<unknown> =>
+  new Promise((resolve, reject) => {
+    channel
+      .push('new_location_message', coords)
+      .receive('ok', resolve)
+      .receive('error', reject)
+      .receive('timeout', () => reject(new Error('new_location_message timeout')));
   });
 
 // request an older page of messages (offset = current message count). Resolves with the page (oldest -> newest).

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Send } from 'lucide-react';
+import { MapPin, Paperclip, Send } from 'lucide-react';
 import type { Channel, Socket } from 'phoenix';
 
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,10 @@ import {
   disconnect,
   pushLoadMore,
   pushNewMessage,
+  pushNewMediaMessage,
+  pushNewLocationMessage,
   pushUpdateName,
+  type OutboundMediaType,
   type WebChannelMessage,
 } from '@/services/webChannelSocket';
 import {
@@ -20,9 +23,20 @@ import {
   getWebChannelContact,
   getWebChannelToken,
   setWebChannelName,
+  uploadMedia,
 } from '@/services/webChannelAuth';
 
 const PAGE_SIZE = 100;
+// Cap the picked file client-side; the backend's multipart parser also caps at 20 MB.
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+
+// Map a file's MIME type to the Glific message type used for flow routing.
+const mimeToType = (mime: string): OutboundMediaType => {
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('image/')) return 'image';
+  return 'document';
+};
 
 export const Chat = () => {
   const navigate = useNavigate();
@@ -35,10 +49,12 @@ export const Chat = () => {
   const [connectionState, setConnectionState] = useState<'connecting' | 'open' | 'reconnecting'>('connecting');
   const [loadingMore, setLoadingMore] = useState(false);
   const [reachedStart, setReachedStart] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const channelRef = useRef<Channel | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // track seen ids so an echoed "new_message" push never duplicates an already-rendered message
   const seenIds = useRef<Set<string>>(new Set());
 
@@ -155,6 +171,71 @@ export const Chat = () => {
     setDraft('');
   };
 
+  // Append an optimistic inbound bubble instantly, then run the network send. `local` bubbles
+  // use a placeholder id so the echo dedupe never collides with a real server id.
+  const appendOptimistic = (message: Omit<WebChannelMessage, 'id' | 'flow' | 'inserted_at'>) => {
+    const optimistic: WebChannelMessage = {
+      ...message,
+      id: `local-${Date.now()}`,
+      flow: 'inbound',
+      inserted_at: new Date().toISOString(),
+    };
+    seenIds.current.add(String(optimistic.id));
+    setMessages((prev) => [...prev, optimistic]);
+    requestAnimationFrame(scrollToBottom);
+  };
+
+  // Upload a picked file, show it immediately (via a local object URL), then send the message
+  // referencing the hosted URL the upload returns.
+  const sendFile = async (file: File) => {
+    if (!channelRef.current) return;
+    if (file.size > MAX_FILE_BYTES) {
+      setUploadError('That file is too large (max 15 MB).');
+      return;
+    }
+    setUploadError(null);
+
+    const type = mimeToType(file.type);
+    const caption = draft.trim();
+    setDraft('');
+    appendOptimistic({ body: caption, type, media: { url: URL.createObjectURL(file) } });
+
+    try {
+      const { url, content_type } = await uploadMedia(file);
+      await pushNewMediaMessage(channelRef.current, {
+        type,
+        url,
+        content_type,
+        filename: file.name,
+        caption: caption || undefined,
+      });
+    } catch {
+      setUploadError('Upload failed. Please try again.');
+    }
+  };
+
+  const sendLocation = () => {
+    if (!channelRef.current) return;
+    if (!('geolocation' in navigator)) {
+      setUploadError('Location is not available in this browser.');
+      return;
+    }
+    setUploadError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        appendOptimistic({ body: `https://www.google.com/maps?q=${latitude},${longitude}`, type: 'location' });
+        if (channelRef.current) {
+          pushNewLocationMessage(channelRef.current, { latitude, longitude }).catch(() => {
+            setUploadError('Could not send your location.');
+          });
+        }
+      },
+      () => setUploadError('Could not get your location.')
+    );
+  };
+
   const handleRename = (newName: string) => {
     setName(newName);
     setWebChannelName(newName);
@@ -199,28 +280,65 @@ export const Chat = () => {
         ))}
       </div>
 
-      <footer className="flex items-center gap-2 border-t px-4 py-3">
-        <Input
-          value={draft}
-          placeholder="Type a message"
-          data-testid="composerInput"
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-        />
-        <Button
-          size="icon"
-          aria-label="send message"
-          data-testid="sendButton"
-          onClick={handleSend}
-          disabled={!draft.trim()}
-        >
-          <Send />
-        </Button>
+      <footer className="flex flex-col gap-1 border-t px-4 py-3">
+        {uploadError && (
+          <span className="text-xs text-destructive" data-testid="uploadError">
+            {uploadError}
+          </span>
+        )}
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            accept="audio/*,video/*,image/*,application/pdf"
+            data-testid="fileInput"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) sendFile(file);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="attach file"
+            data-testid="attachButton"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="share location"
+            data-testid="locationButton"
+            onClick={sendLocation}
+          >
+            <MapPin />
+          </Button>
+          <Input
+            value={draft}
+            placeholder="Type a message"
+            data-testid="composerInput"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+          />
+          <Button
+            size="icon"
+            aria-label="send message"
+            data-testid="sendButton"
+            onClick={handleSend}
+            disabled={!draft.trim()}
+          >
+            <Send />
+          </Button>
+        </div>
       </footer>
     </div>
   );
