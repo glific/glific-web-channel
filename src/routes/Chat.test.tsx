@@ -25,6 +25,20 @@ vi.mock('@/services/webChannelSocket', () => ({
   pushUpdateName: vi.fn(() => Promise.resolve()),
 }));
 
+// Controllable audio-recorder stand-in (the real hook is unit-tested separately).
+const { recorderMock } = vi.hoisted(() => ({
+  recorderMock: {
+    isSupported: true,
+    isRecording: false,
+    seconds: 0,
+    error: null as string | null,
+    start: vi.fn(),
+    stop: vi.fn(),
+    cancel: vi.fn(),
+  },
+}));
+vi.mock('@/hooks/useAudioRecorder', () => ({ useAudioRecorder: () => recorderMock }));
+
 const renderChat = () =>
   render(
     <MemoryRouter>
@@ -36,6 +50,42 @@ describe('<Chat /> media & location composer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     URL.createObjectURL = vi.fn(() => 'blob:preview');
+    recorderMock.isSupported = true;
+    recorderMock.isRecording = false;
+    recorderMock.seconds = 0;
+    recorderMock.error = null;
+  });
+
+  it('shows a mic button and starts recording on click', async () => {
+    renderChat();
+    await screen.findByTestId('composerInput');
+
+    fireEvent.click(screen.getByTestId('recordButton'));
+    expect(recorderMock.start).toHaveBeenCalled();
+  });
+
+  it('shows a recording bar while recording; stop and cancel drive the recorder', async () => {
+    recorderMock.isRecording = true;
+    recorderMock.seconds = 5;
+
+    renderChat();
+    await screen.findByTestId('recordingBar');
+    expect(screen.getByTestId('recordingTimer')).toHaveTextContent('0:05');
+    // the normal composer is replaced while recording
+    expect(screen.queryByTestId('composerInput')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('sendRecordingButton'));
+    expect(recorderMock.stop).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('cancelRecordingButton'));
+    expect(recorderMock.cancel).toHaveBeenCalled();
+  });
+
+  it('hides the mic button when recording is unsupported', async () => {
+    recorderMock.isSupported = false;
+    renderChat();
+    await screen.findByTestId('composerInput');
+    expect(screen.queryByTestId('recordButton')).not.toBeInTheDocument();
   });
 
   it('uploads a picked file and pushes a media message with the hosted url', async () => {

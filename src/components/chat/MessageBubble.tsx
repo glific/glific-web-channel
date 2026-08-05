@@ -27,7 +27,7 @@ const MediaContent = ({ type, url, caption }: { type: string; url: string; capti
   <div className="flex flex-col gap-1" data-testid="mediaContent">
     {type === 'image' && <img src={url} alt={caption || 'image'} className="max-h-64 rounded-lg" />}
     {type === 'video' && <video src={url} controls className="max-h-64 rounded-lg" />}
-    {type === 'audio' && <audio src={url} controls className="w-full" />}
+    {type === 'audio' && <audio src={url} controls className="w-64 max-w-full" />}
     {type === 'document' && (
       <a href={url} target="_blank" rel="noreferrer" download className="underline">
         {caption || 'Download file'}

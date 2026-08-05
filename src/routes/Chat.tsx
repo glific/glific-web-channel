@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Paperclip, Send } from 'lucide-react';
+import { MapPin, Mic, Paperclip, Send, Trash2 } from 'lucide-react';
 import type { Channel, Socket } from 'phoenix';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { EditName } from '@/components/chat/EditName';
+import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import {
   connectAndJoin,
   disconnect,
@@ -38,6 +39,12 @@ const mimeToType = (mime: string): OutboundMediaType => {
   return 'document';
 };
 
+const formatDuration = (seconds: number): string => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
 export const Chat = () => {
   const navigate = useNavigate();
   const contact = getWebChannelContact();
@@ -57,10 +64,22 @@ export const Chat = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // track seen ids so an echoed "new_message" push never duplicates an already-rendered message
   const seenIds = useRef<Set<string>>(new Set());
+  // whether to keep the view pinned to the bottom (true until the user scrolls up). Intent, not
+  // a live position check: async media (images/audio) loading after the initial scroll grows the
+  // content and would otherwise leave the view stranded in the middle on refresh.
+  const pinnedRef = useRef(true);
 
   const scrollToBottom = () => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  // True when the view is already at/near the bottom — used to decide whether an incoming
+  // message should auto-scroll (so we don't yank the user down while they read older messages).
+  const isNearBottom = () => {
+    const el = listRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
 
   // open socket + join channel on mount
@@ -83,6 +102,7 @@ export const Chat = () => {
           if (seenIds.current.has(String(message.id))) return;
           seenIds.current.add(String(message.id));
           setMessages((prev) => [...prev, message]);
+          if (pinnedRef.current) requestAnimationFrame(scrollToBottom);
         },
       },
     })
@@ -97,7 +117,9 @@ export const Chat = () => {
         setMessages(initial);
         setConnectionState('open');
         setReachedStart(initial.length < PAGE_SIZE);
-        // jump to the newest message after the first paint
+        // jump to the newest message after the first paint; onLoadCapture keeps us pinned as
+        // images/audio finish loading and grow the content.
+        pinnedRef.current = true;
         requestAnimationFrame(scrollToBottom);
       })
       .catch(() => {
@@ -116,7 +138,12 @@ export const Chat = () => {
   // reverse-infinite scroll: prepend older page when the user scrolls to the top
   const handleScroll = () => {
     const el = listRef.current;
-    if (!el || el.scrollTop > 0 || loadingMore || reachedStart || !channelRef.current) return;
+    if (!el) return;
+    // re-evaluate the pin intent on every user scroll: scrolling up unpins, returning to the
+    // bottom re-pins.
+    pinnedRef.current = isNearBottom();
+
+    if (el.scrollTop > 0 || loadingMore || reachedStart || !channelRef.current) return;
 
     setLoadingMore(true);
     const previousHeight = el.scrollHeight;
@@ -214,6 +241,9 @@ export const Chat = () => {
     }
   };
 
+  // A finished recording is just an audio File — send it through the same upload path.
+  const recorder = useAudioRecorder(sendFile);
+
   const sendLocation = () => {
     if (!channelRef.current) return;
     if (!('geolocation' in navigator)) {
@@ -272,6 +302,12 @@ export const Chat = () => {
         className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4"
         ref={listRef}
         onScroll={handleScroll}
+        // media (img/audio/video) load events bubble here via capture; while pinned, keep the
+        // view glued to the bottom as late-loading media grows the content (fixes refresh landing
+        // mid-list).
+        onLoadCapture={() => {
+          if (pinnedRef.current) scrollToBottom();
+        }}
         data-testid="messageList"
       >
         {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
@@ -281,64 +317,103 @@ export const Chat = () => {
       </div>
 
       <footer className="flex flex-col gap-1 border-t px-4 py-3">
-        {uploadError && (
+        {(uploadError || recorder.error) && (
           <span className="text-xs text-destructive" data-testid="uploadError">
-            {uploadError}
+            {uploadError || recorder.error}
           </span>
         )}
-        <div className="flex items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            hidden
-            accept="audio/*,video/*,image/*,application/pdf"
-            data-testid="fileInput"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) sendFile(file);
-              e.target.value = '';
-            }}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="attach file"
-            data-testid="attachButton"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Paperclip />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="share location"
-            data-testid="locationButton"
-            onClick={sendLocation}
-          >
-            <MapPin />
-          </Button>
-          <Input
-            value={draft}
-            placeholder="Type a message"
-            data-testid="composerInput"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-          <Button
-            size="icon"
-            aria-label="send message"
-            data-testid="sendButton"
-            onClick={handleSend}
-            disabled={!draft.trim()}
-          >
-            <Send />
-          </Button>
-        </div>
+        {recorder.isRecording ? (
+          <div className="flex items-center gap-2" data-testid="recordingBar">
+            <span className="size-2.5 animate-pulse rounded-full bg-destructive" />
+            <span className="text-sm tabular-nums" data-testid="recordingTimer">
+              {formatDuration(recorder.seconds)}
+            </span>
+            <span className="text-sm text-muted-foreground">Recording…</span>
+            <div className="flex-1" />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="cancel recording"
+              data-testid="cancelRecordingButton"
+              onClick={recorder.cancel}
+            >
+              <Trash2 />
+            </Button>
+            <Button
+              size="icon"
+              aria-label="send recording"
+              data-testid="sendRecordingButton"
+              onClick={recorder.stop}
+            >
+              <Send />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              hidden
+              accept="audio/*,video/*,image/*,application/pdf"
+              data-testid="fileInput"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) sendFile(file);
+                e.target.value = '';
+              }}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="attach file"
+              data-testid="attachButton"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="share location"
+              data-testid="locationButton"
+              onClick={sendLocation}
+            >
+              <MapPin />
+            </Button>
+            {recorder.isSupported && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="record audio"
+                data-testid="recordButton"
+                onClick={recorder.start}
+              >
+                <Mic />
+              </Button>
+            )}
+            <Input
+              value={draft}
+              placeholder="Type a message"
+              data-testid="composerInput"
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
+            <Button
+              size="icon"
+              aria-label="send message"
+              data-testid="sendButton"
+              onClick={handleSend}
+              disabled={!draft.trim()}
+            >
+              <Send />
+            </Button>
+          </div>
+        )}
       </footer>
     </div>
   );
