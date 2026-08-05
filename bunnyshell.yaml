@@ -19,9 +19,10 @@
 #   1. Push each branch to the remote Bunnyshell is connected to (it cannot see local
 #      commits): glific @ web-channel-prototype, glific-frontend @ web-channel-prototype,
 #      and this repo once it has a remote.
-#   2. Set the secret env vars in the Bunnyshell environment (referenced below via
+#   2. Set the secret/config env vars in the Bunnyshell environment (referenced below via
 #      {{ env.vars.NAME }}): POSTGRES_PASSWORD, OBAN_FINGERPRINT + OBAN_AUTH_KEY (the backend
-#      Dockerfile fetches deps from getoban.pro), and OPEN_AI_KEY (for GPT/GPT-vision nodes).
+#      Dockerfile fetches deps from getoban.pro), OPEN_AI_KEY (for GPT/GPT-vision nodes), and
+#      KAAPI_ENDPOINT + KAAPI_API_KEY (for speech-to-text / TTS nodes).
 #   3. Confirm the backend build-arg VERSIONS below match your working local docker build
 #      (the Dockerfile ARGs have no defaults). Best-guess values are marked CONFIRM.
 kind: Environment
@@ -83,6 +84,10 @@ components:
         # OpenAI key for GPT/GPT-vision flow nodes (config/runtime.exs reads OPEN_AI_KEY).
         # Secret — set the value in the Bunnyshell environment, same as the DB/Oban secrets.
         OPEN_AI_KEY: '{{ env.vars.OPEN_AI_KEY }}'
+        # Kaapi (speech-to-text / TTS) — endpoint is environment-specific, the api key is a
+        # secret. Both read by config/runtime.exs; set their values in the Bunnyshell environment.
+        KAAPI_ENDPOINT: '{{ env.vars.KAAPI_ENDPOINT }}'
+        KAAPI_API_KEY: '{{ env.vars.KAAPI_API_KEY }}'
       ports:
         - '4000:4000'
     hosts:
