@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { Chat } from './Chat';
-import { pushNewMediaMessage, pushNewLocationMessage } from '@/services/webChannelSocket';
-import { uploadMedia } from '@/services/webChannelAuth';
+import { connectAndJoin, pushNewMediaMessage, pushNewLocationMessage } from '@/services/webChannelSocket';
+import { setWebChannelName, uploadMedia } from '@/services/webChannelAuth';
 
 vi.mock('@/services/webChannelAuth', () => ({
   getWebChannelContact: () => ({ contactId: 1, name: 'Test' }),
@@ -122,5 +122,29 @@ describe('<Chat /> media & location composer', () => {
     await waitFor(() =>
       expect(pushNewLocationMessage).toHaveBeenCalledWith({ id: 'ch' }, { latitude: 12.9, longitude: 77.5 })
     );
+  });
+
+  it('updates the header name (and persists it) when the server pushes contact_updated', async () => {
+    renderChat();
+    await screen.findByTestId('composerInput');
+    // header starts from the stored contact name
+    expect(screen.getByTestId('contactName')).toHaveTextContent('Test');
+
+    // grab the handlers the Chat passed into connectAndJoin and fire the server event
+    const { handlers } = (connectAndJoin as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    act(() => handlers.onContactUpdated('Priya'));
+
+    expect(screen.getByTestId('contactName')).toHaveTextContent('Priya');
+    expect(setWebChannelName).toHaveBeenCalledWith('Priya');
+  });
+
+  it('falls back to "You" when contact_updated resolves a null name', async () => {
+    renderChat();
+    await screen.findByTestId('composerInput');
+
+    const { handlers } = (connectAndJoin as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    act(() => handlers.onContactUpdated(null));
+
+    expect(screen.getByTestId('contactName')).toHaveTextContent('You');
   });
 });

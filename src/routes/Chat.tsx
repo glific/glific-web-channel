@@ -61,6 +61,7 @@ export const Chat = () => {
   const socketRef = useRef<Socket | null>(null);
   const channelRef = useRef<Channel | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // track seen ids so an echoed "new_message" push never duplicates an already-rendered message
   const seenIds = useRef<Set<string>>(new Set());
@@ -81,6 +82,23 @@ export const Chat = () => {
     if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
+
+  // Robust auto-scroll: a ResizeObserver on the message content fires on ANY height change —
+  // an <img> decoding, an <audio>/<video> loading its metadata (these never fire a bubbling
+  // `load` event, which is why watching load events alone missed them), a font reflow, or a new
+  // bubble appended. Whenever we're pinned to the bottom, re-stick. This is strictly more reliable
+  // than enumerating per-media load events. `scrollTop` changes don't alter the content box, so
+  // this never loops. ResizeObserver is supported on all modern desktop + mobile browsers.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === 'undefined') return undefined;
+
+    const observer = new ResizeObserver(() => {
+      if (pinnedRef.current) scrollToBottom();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   // open socket + join channel on mount
   useEffect(() => {
@@ -103,6 +121,13 @@ export const Chat = () => {
           seenIds.current.add(String(message.id));
           setMessages((prev) => [...prev, message]);
           if (pinnedRef.current) requestAnimationFrame(scrollToBottom);
+        },
+        // a flow captured @contact.fields.name mid-session (e.g. the newcontact flow) — reflect
+        // the new name in the header and persist it so it survives a refresh.
+        onContactUpdated: (updatedName) => {
+          if (!active) return;
+          setName(updatedName ?? '');
+          if (updatedName) setWebChannelName(updatedName);
         },
       },
     })
@@ -184,6 +209,9 @@ export const Chat = () => {
       type: 'TEXT',
     };
     seenIds.current.add(String(optimistic.id));
+    // sending your own message is explicit intent to follow the bottom — re-pin so the
+    // ResizeObserver sticks to bottom even if the user had scrolled up.
+    pinnedRef.current = true;
     setMessages((prev) => [...prev, optimistic]);
     requestAnimationFrame(scrollToBottom);
 
@@ -208,6 +236,8 @@ export const Chat = () => {
       inserted_at: new Date().toISOString(),
     };
     seenIds.current.add(String(optimistic.id));
+    // own send → follow the bottom as the uploaded image/audio finishes loading (the reported bug).
+    pinnedRef.current = true;
     setMessages((prev) => [...prev, optimistic]);
     requestAnimationFrame(scrollToBottom);
   };
@@ -299,21 +329,19 @@ export const Chat = () => {
       </header>
 
       <div
-        className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4"
+        className="flex flex-1 flex-col overflow-y-auto px-4 py-4"
         ref={listRef}
         onScroll={handleScroll}
-        // media (img/audio/video) load events bubble here via capture; while pinned, keep the
-        // view glued to the bottom as late-loading media grows the content (fixes refresh landing
-        // mid-list).
-        onLoadCapture={() => {
-          if (pinnedRef.current) scrollToBottom();
-        }}
         data-testid="messageList"
       >
-        {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} onInteractiveReply={sendBody} />
-        ))}
+        {/* Observed by a ResizeObserver (see the auto-scroll effect): its height changes as
+            media loads or bubbles are appended, which is what keeps the view pinned to bottom. */}
+        <div className="flex shrink-0 flex-col gap-2" ref={contentRef}>
+          {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} onInteractiveReply={sendBody} />
+          ))}
+        </div>
       </div>
 
       <footer className="flex flex-col gap-1 border-t px-4 py-3">

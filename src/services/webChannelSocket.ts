@@ -67,6 +67,9 @@ export interface WebChannelMessage {
 export interface ConnectHandlers {
   // fired for every server "new_message" push (a single message to append)
   onNewMessage?: (message: WebChannelMessage) => void;
+  // fired when the server resolves a new display name for the contact (e.g. a flow captured
+  // @contact.fields.name mid-session); `name` is null when the contact has no name.
+  onContactUpdated?: (name: string | null) => void;
   // socket connection lifecycle — surface a "reconnecting…" state in the UI
   onOpen?: () => void;
   onError?: (error?: unknown) => void;
@@ -102,6 +105,12 @@ export const connectAndJoin = ({ token, contactId, handlers = {} }: ConnectParam
   if (handlers.onNewMessage) {
     channel.on('new_message', (message: WebChannelMessage) => {
       handlers.onNewMessage?.(message);
+    });
+  }
+
+  if (handlers.onContactUpdated) {
+    channel.on('contact_updated', (payload: { name: string | null }) => {
+      handlers.onContactUpdated?.(payload?.name ?? null);
     });
   }
 
