@@ -10,8 +10,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { CustomUiBlock } from '@/components/chat/customUi/CustomUiBlock';
 import { whatsappToJsx } from '@/lib/whatsapp';
 import type {
+  CustomUiResponse,
   InteractiveContent,
   ListContent,
   LocationRequestContent,
@@ -26,12 +28,23 @@ import type {
 // `onReply` is the same optimistic send path the composer uses. Once the user has replied we
 // disable the controls locally so a second tap can't advance the flow twice (the widget user,
 // unlike the read-only staff view, can actually click).
+//
+// A `custom_ui` envelope is the exception: it is rendered by CustomUiBlock and answered with a
+// structured `custom_ui_response` push (contract §4) via `onCustomUiResponse` — NOT a text
+// reply — which is why it needs the message id.
 export interface InteractiveMessageProps {
   content: InteractiveContent;
+  messageId: number | string;
   onReply?: (title: string) => void;
+  onCustomUiResponse?: (response: CustomUiResponse) => Promise<unknown> | void;
 }
 
-export const InteractiveMessage = ({ content, onReply }: InteractiveMessageProps) => {
+export const InteractiveMessage = ({
+  content,
+  messageId,
+  onReply,
+  onCustomUiResponse,
+}: InteractiveMessageProps) => {
   const [replied, setReplied] = useState(false);
 
   const reply = (title: string) => {
@@ -41,6 +54,8 @@ export const InteractiveMessage = ({ content, onReply }: InteractiveMessageProps
   };
 
   switch (content.type) {
+    case 'custom_ui':
+      return <CustomUiBlock messageId={messageId} content={content} onRespond={onCustomUiResponse} />;
     case 'quick_reply':
       return <QuickReply content={content} disabled={replied} onSelect={reply} />;
     case 'list':

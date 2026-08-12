@@ -5,6 +5,7 @@ import {
   pushNewMessage,
   pushNewMediaMessage,
   pushNewLocationMessage,
+  pushCustomUiResponse,
   pushLoadMore,
   pushUpdateName,
   disconnect,
@@ -108,6 +109,35 @@ describe('webChannelSocket', () => {
     await pushNewLocationMessage(mockChannel as any, { latitude: 12.9, longitude: 77.5 });
 
     expect(mockChannel.push).toHaveBeenCalledWith('new_location_message', { latitude: 12.9, longitude: 77.5 });
+  });
+
+  it('pushCustomUiResponse pushes the contract §4 payload and resolves on ok', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ ok: { status: 'ok' } }));
+
+    const response = {
+      message_id: 4211,
+      component: 'glific/image_panel',
+      values: { course: 'c2' },
+      summary: 'Digital skills',
+      context: { node: 'n1' },
+    };
+    const reply = await pushCustomUiResponse(mockChannel as any, response);
+
+    expect(mockChannel.push).toHaveBeenCalledWith('custom_ui_response', response);
+    expect(reply).toEqual({ status: 'ok' });
+  });
+
+  it('pushCustomUiResponse rejects when the server replies with error', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ error: { reason: 'already_answered' } }));
+
+    await expect(
+      pushCustomUiResponse(mockChannel as any, {
+        message_id: 1,
+        component: 'glific/form',
+        values: {},
+        summary: 's',
+      })
+    ).rejects.toEqual({ reason: 'already_answered' });
   });
 
   it('pushLoadMore pushes the offset and resolves the older page', async () => {

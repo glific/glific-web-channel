@@ -15,7 +15,9 @@ import {
   pushNewMessage,
   pushNewMediaMessage,
   pushNewLocationMessage,
+  pushCustomUiResponse,
   pushUpdateName,
+  type CustomUiResponse,
   type OutboundMediaType,
   type WebChannelMessage,
 } from '@/services/webChannelSocket';
@@ -228,7 +230,7 @@ export const Chat = () => {
 
   // Append an optimistic inbound bubble instantly, then run the network send. `local` bubbles
   // use a placeholder id so the echo dedupe never collides with a real server id.
-  const appendOptimistic = (message: Omit<WebChannelMessage, 'id' | 'flow' | 'inserted_at'>) => {
+  const appendOptimistic = (message: Omit<WebChannelMessage, 'id' | 'flow' | 'inserted_at'>): string => {
     const optimistic: WebChannelMessage = {
       ...message,
       id: `local-${Date.now()}`,
@@ -240,6 +242,25 @@ export const Chat = () => {
     pinnedRef.current = true;
     setMessages((prev) => [...prev, optimistic]);
     requestAnimationFrame(scrollToBottom);
+    return String(optimistic.id);
+  };
+
+  // Answer a custom_ui block: a structured push, not a text message. The contact's own bubble
+  // is the summary string (which is exactly what the backend persists as the message body), so
+  // the optimistic bubble matches what a reload will show.
+  // A rejection here is NOT the same as a queued text message: the server can refuse the answer
+  // (unknown/already-answered message) or never reply at all, and both must be visible instead
+  // of looking exactly like success. Rethrow so the block re-enables itself.
+  const sendCustomUiResponse = (response: CustomUiResponse): Promise<unknown> => {
+    if (!channelRef.current) return Promise.reject(new Error('not connected'));
+    setUploadError(null);
+    const optimisticId = appendOptimistic({ body: response.summary, type: 'custom_ui_response' });
+    return pushCustomUiResponse(channelRef.current, response).catch((reason) => {
+      // roll the bubble back — the answer was not accepted, so nothing was said
+      setMessages((prev) => prev.filter((m) => String(m.id) !== optimisticId));
+      setUploadError('Could not send your answer. Please try again.');
+      throw reason;
+    });
   };
 
   // Upload a picked file, show it immediately (via a local object URL), then send the message
@@ -339,7 +360,12 @@ export const Chat = () => {
         <div className="flex shrink-0 flex-col gap-2" ref={contentRef}>
           {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} onInteractiveReply={sendBody} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              onInteractiveReply={sendBody}
+              onCustomUiResponse={sendCustomUiResponse}
+            />
           ))}
         </div>
       </div>

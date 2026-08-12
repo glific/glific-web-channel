@@ -38,7 +38,26 @@ export interface LocationRequestContent {
   action?: { name?: string };
 }
 
-export type InteractiveContent = QuickReplyContent | ListContent | LocationRequestContent;
+// The custom UI envelope (contract §3). `props` is opaque to the transport layer — each
+// registered renderer knows the shape of its own props. `answered` / `answer_summary` are
+// written into the stored content by the backend once a response is accepted, so a reloaded
+// history renders the block in its true answered state.
+export interface CustomUiContent {
+  type: 'custom_ui';
+  version?: string;
+  component: string;
+  props?: Record<string, unknown>;
+  fallback?: string;
+  context?: Record<string, unknown>;
+  answered?: boolean;
+  answer_summary?: string | null;
+}
+
+export type InteractiveContent =
+  | QuickReplyContent
+  | ListContent
+  | LocationRequestContent
+  | CustomUiContent;
 
 // The media payload as it arrives on a message over the socket (the serializer emits `{ url }`;
 // content_type is filled in for optimistic bubbles the widget builds locally).
@@ -169,6 +188,25 @@ export const pushNewLocationMessage = (
       .receive('ok', resolve)
       .receive('error', reject)
       .receive('timeout', () => reject(new Error('new_location_message timeout')));
+  });
+
+// A structured answer to a custom_ui block (contract §4). NOT a text message: `summary` is the
+// human-readable string persisted as the message body, `values` is what the flow reads.
+export interface CustomUiResponse {
+  message_id: number | string;
+  component: string;
+  values: Record<string, unknown>;
+  summary: string;
+  context?: Record<string, unknown>;
+}
+
+export const pushCustomUiResponse = (channel: Channel, response: CustomUiResponse): Promise<unknown> =>
+  new Promise((resolve, reject) => {
+    channel
+      .push('custom_ui_response', response)
+      .receive('ok', resolve)
+      .receive('error', reject)
+      .receive('timeout', () => reject(new Error('custom_ui_response timeout')));
   });
 
 // request an older page of messages (offset = current message count). Resolves with the page (oldest -> newest).
