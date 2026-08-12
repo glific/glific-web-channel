@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 
 import { InteractiveMessage } from './InteractiveMessage';
 import { register, unregister, type CustomUiRendererProps } from './customUi/registry';
-import { parseFallbackValues } from './customUi/values';
+import { clampSummary, parseFallbackValues, SUMMARY_MAX } from './customUi/values';
 import type { CustomUiContent } from '@/services/webChannelSocket';
 
 const envelope = (overrides: Partial<CustomUiContent>): CustomUiContent => ({
@@ -239,6 +239,21 @@ describe('custom_ui answered state', () => {
     // the server refused, so the truth is still "unanswered" — let the contact try again
     await waitFor(() => expect(screen.getByRole('button', { name: 'Digital skills' })).toBeEnabled());
     expect(screen.queryByTestId('customUiAnswerSummary')).not.toBeInTheDocument();
+
+    // ...and a retry really does push again (the single-submit guard was released too)
+    await userEvent.click(screen.getByRole('button', { name: 'Digital skills' }));
+    expect(onRespond).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders only the fallback text when the bubble has no numeric server id', () => {
+    const onRespond = vi.fn();
+    render(
+      <InteractiveMessage content={imagePanel} messageId="local-123" onCustomUiResponse={onRespond} />
+    );
+
+    // §4's message_id must be the numeric server id, so there is nothing safe to answer with
+    expect(screen.queryByTestId('customUiBlock')).not.toBeInTheDocument();
+    expect(screen.getByText('Pick a course')).toBeInTheDocument();
   });
 
   it('stays enabled when the server says it has not been answered', () => {
@@ -249,8 +264,61 @@ describe('custom_ui answered state', () => {
   });
 });
 
+describe('clampSummary (contract §7)', () => {
+  it('substitutes the fallback for a blank summary', () => {
+    expect(clampSummary('   ', 'Answered')).toBe('Answered');
+  });
+
+  it('clamps to 500 chars', () => {
+    expect(clampSummary('a'.repeat(600), 'x')).toHaveLength(SUMMARY_MAX);
+  });
+
+  it('never splits a UTF-16 surrogate pair', () => {
+    // an emoji straddling the boundary: 499 ASCII chars then a 2-code-unit emoji
+    const summary = `${'a'.repeat(SUMMARY_MAX - 1)}😀${'b'.repeat(50)}`;
+    const clamped = clampSummary(summary, 'x');
+
+    expect(clamped).toHaveLength(SUMMARY_MAX - 1);
+    expect(clamped.endsWith('a')).toBe(true);
+    // a lone surrogate is not encodable as UTF-8 and would go on the wire as U+FFFD
+    const roundTripped = new TextDecoder().decode(new TextEncoder().encode(clamped));
+    expect(roundTripped).toBe(clamped);
+    expect(roundTripped).not.toContain('�');
+  });
+
+  it('keeps a whole emoji that fits', () => {
+    const summary = `${'a'.repeat(SUMMARY_MAX - 2)}😀${'b'.repeat(50)}`;
+    expect(clampSummary(summary, 'x')).toHaveLength(SUMMARY_MAX);
+    expect(clampSummary(summary, 'x').endsWith('😀')).toBe(true);
+  });
+});
+
 describe('custom_ui renderer registry', () => {
   afterEach(() => unregister('tap/attendance'));
+
+  it('pushes only once when a renderer submits twice in the same tick', async () => {
+    // `answered` is derived from state, so both calls see the old value — only a synchronous
+    // guard stops the second push (whose rejection would roll back the accepted first answer).
+    const Double = ({ onSubmit }: CustomUiRendererProps) => (
+      <button
+        type="button"
+        data-testid="tapAttendance"
+        onClick={() => {
+          onSubmit({ values: { present: true }, summary: 'Present' });
+          onSubmit({ values: { present: false }, summary: 'Absent' });
+        }}
+      >
+        Present
+      </button>
+    );
+    register('tap/attendance', Double);
+
+    const onRespond = renderBlock(envelope({ component: 'tap/attendance' }));
+    await userEvent.click(screen.getByTestId('tapAttendance'));
+
+    expect(onRespond).toHaveBeenCalledTimes(1);
+    expect(onRespond).toHaveBeenCalledWith(expect.objectContaining({ summary: 'Present' }));
+  });
 
   it('prefers a registered renderer over the generic fallback card', async () => {
     const Custom = ({ onSubmit }: CustomUiRendererProps) => (

@@ -55,6 +55,15 @@ export const InteractiveMessage = ({
 
   switch (content.type) {
     case 'custom_ui':
+      // §4's message_id is the numeric server id of the message being answered. A custom_ui
+      // bubble only ever arrives from the server, so a non-numeric (optimistic `local-…`) id
+      // here means something upstream is wrong — render the fallback text rather than push an
+      // id the backend would reject.
+      if (typeof messageId !== 'number') {
+        return content.fallback ? (
+          <div className="break-words whitespace-pre-wrap">{whatsappToJsx(content.fallback)}</div>
+        ) : null;
+      }
       return <CustomUiBlock messageId={messageId} content={content} onRespond={onCustomUiResponse} />;
     case 'quick_reply':
       return <QuickReply content={content} disabled={replied} onSelect={reply} />;

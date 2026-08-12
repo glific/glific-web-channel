@@ -5,10 +5,18 @@
 // and never emit a blank summary (§4 requires a non-empty string — it becomes the message body).
 export const SUMMARY_MAX = 500;
 
+// A lone high surrogate (0xD800-0xDBFF) at the end of a slice is half an emoji: it is not
+// encodable as UTF-8, so it would go on the wire as U+FFFD. §7 requires clamping never to split
+// a surrogate pair — drop the orphan instead.
+const dropLoneTrailingSurrogate = (value: string): string => {
+  const last = value.charCodeAt(value.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? value.slice(0, -1) : value;
+};
+
 export const clampSummary = (summary: string, fallback: string): string => {
   const trimmed = summary.trim();
   const value = trimmed || fallback;
-  return value.length > SUMMARY_MAX ? value.slice(0, SUMMARY_MAX) : value;
+  return value.length > SUMMARY_MAX ? dropLoneTrailingSurrogate(value.slice(0, SUMMARY_MAX)) : value;
 };
 
 // A valid JSON *object* typed into the fallback card is sent as `values` verbatim; anything

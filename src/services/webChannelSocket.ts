@@ -193,7 +193,9 @@ export const pushNewLocationMessage = (
 // A structured answer to a custom_ui block (contract §4). NOT a text message: `summary` is the
 // human-readable string persisted as the message body, `values` is what the flow reads.
 export interface CustomUiResponse {
-  message_id: number | string;
+  // the server id of the outbound custom_ui message; the backend guards on `is_integer`, so an
+  // optimistic `local-…` id must never reach here
+  message_id: number;
   component: string;
   values: Record<string, unknown>;
   summary: string;

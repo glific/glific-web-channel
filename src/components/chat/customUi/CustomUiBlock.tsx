@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { FallbackCard } from '@/components/chat/customUi/blocks/FallbackCard';
 import { resolveRenderer, type CustomUiAnswer } from '@/components/chat/customUi/registry';
@@ -8,7 +8,9 @@ import type { CustomUiContent, CustomUiResponse } from '@/services/webChannelSoc
 import '@/components/chat/customUi/blocks';
 
 export interface CustomUiBlockProps {
-  messageId: number | string;
+  // the server id of the outbound custom_ui message being answered — §4's `message_id`, which
+  // the backend guards on with `is_integer`. Never an optimistic `local-…` id.
+  messageId: number;
   content: CustomUiContent;
   // structured push (contract §4) — deliberately NOT the plain-text reply path. May return a
   // promise; a rejection means the server refused (or never answered) and the block re-opens.
@@ -24,6 +26,11 @@ export interface CustomUiBlockProps {
 // the block immediately without waiting for the round trip. Neither can re-enable the other.
 export const CustomUiBlock = ({ messageId, content, onRespond }: CustomUiBlockProps) => {
   const [localAnswer, setLocalAnswer] = useState<CustomUiAnswer | null>(null);
+  // `answered` is derived from state, so two submits fired in the same render tick would both
+  // see the old value and both push. The backend rejects the second, but its rejection path
+  // would then roll back the first (already accepted) answer. A ref flips synchronously, so
+  // only one push is ever issued.
+  const submitted = useRef(false);
 
   const answered = content.answered === true || localAnswer !== null;
   const answerSummary = content.answer_summary ?? localAnswer?.summary ?? null;
@@ -31,7 +38,8 @@ export const CustomUiBlock = ({ messageId, content, onRespond }: CustomUiBlockPr
   const Renderer = resolveRenderer(content.component) ?? FallbackCard;
 
   const handleSubmit = (answer: CustomUiAnswer) => {
-    if (answered) return;
+    if (answered || submitted.current) return;
+    submitted.current = true;
     setLocalAnswer(answer);
     const sent = onRespond?.({
       message_id: messageId,
@@ -43,7 +51,10 @@ export const CustomUiBlock = ({ messageId, content, onRespond }: CustomUiBlockPr
     // the server refused the answer (or never replied) — the truth is still "unanswered", so
     // let the contact try again instead of leaving a permanently dead block
     if (sent && typeof sent.then === 'function') {
-      sent.catch(() => setLocalAnswer(null));
+      sent.catch(() => {
+        submitted.current = false;
+        setLocalAnswer(null);
+      });
     }
   };
 
