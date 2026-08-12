@@ -10,6 +10,11 @@ import mkcert from "vite-plugin-mkcert";
 // ESM-safe __dirname
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// The Glific backend's dev HTTPS port. Overridable so the widget can be pointed at a
+// second backend instance (e.g. a feature worktree running alongside your usual one)
+// without editing this file: GLIFIC_BACKEND_PORT=4101 yarn dev
+const backendPort = process.env.GLIFIC_BACKEND_PORT ?? "4001";
+
 // https://vite.dev/config/
 export default defineConfig({
   // mkcert() is apply:'serve' — it provisions a browser-trusted cert for the dev
@@ -33,12 +38,12 @@ export default defineConfig({
     // secure:false lets Node accept it). Same-origin from the app's perspective.
     proxy: {
       "/api": {
-        target: "https://localhost:4001",
+        target: `https://localhost:${backendPort}`,
         changeOrigin: true,
         secure: false,
       },
       "/web_socket": {
-        target: "wss://localhost:4001",
+        target: `wss://localhost:${backendPort}`,
         ws: true,
         changeOrigin: true,
         secure: false,
