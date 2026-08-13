@@ -12,14 +12,14 @@ import { whatsappToJsx } from '@/lib/whatsapp';
 export const BlockText = ({ children, className }: { children?: string; className?: string }) => {
   if (!children) return null;
   return (
-    <div className={cn('break-words whitespace-pre-wrap', className)} data-testid="customUiText">
+    <div className={cn('break-words whitespace-pre-wrap', className)} data-testid="blocksText">
       {whatsappToJsx(children)}
     </div>
   );
 };
 
-// `image` — url + alt. Decorative by default (alt=""), so the accessible name of an enclosing
-// button is the option label alone.
+// `image` — url + alt. Decorative by default (alt=""); an authored `image_alt` (§6) supplies a
+// real description.
 export const BlockImage = ({ url, alt = '', className }: { url?: string; alt?: string; className?: string }) => {
   if (!url) return null;
   return <img src={url} alt={alt} className={cn('w-full rounded-lg object-cover', className)} loading="lazy" />;
@@ -65,11 +65,13 @@ export const BlockInput = ({
   </div>
 );
 
-// `option` — a tappable id + label with an optional image. The label is the button's only text
-// content, which makes the accessible name exactly the label.
+// `option` — a tappable id + label with an optional image. `aria-label` pins the accessible
+// name to the label alone, so an authored `image_alt` describes the picture without leaking
+// into the button's name.
 export const BlockOption = ({
   label,
   image,
+  imageAlt,
   description,
   selected,
   disabled,
@@ -79,6 +81,7 @@ export const BlockOption = ({
 }: {
   label: string;
   image?: string;
+  imageAlt?: string;
   description?: string;
   selected?: boolean;
   disabled?: boolean;
@@ -90,6 +93,7 @@ export const BlockOption = ({
     type="button"
     disabled={disabled}
     aria-pressed={selected}
+    aria-label={label}
     data-testid={testId}
     className={cn(
       'flex flex-col overflow-hidden rounded-lg border border-border text-left transition-colors',
@@ -99,7 +103,7 @@ export const BlockOption = ({
     )}
     onClick={onSelect}
   >
-    <BlockImage url={image} className="aspect-square" />
+    <BlockImage url={image} alt={imageAlt} className="aspect-square" />
     <span className="px-2 py-1.5 text-sm font-medium">{label}</span>
     {description && <span className="px-2 pb-1.5 text-xs text-muted-foreground">{description}</span>}
   </button>

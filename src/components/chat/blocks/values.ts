@@ -1,4 +1,4 @@
-// Pure helpers shared by the custom UI blocks (kept out of the component files so fast refresh
+// Pure helpers shared by the built-in blocks (kept out of the component files so fast refresh
 // stays component-only).
 
 // Contract §7 caps a summary at 500 chars; clamp here so a wide form can never be rejected,

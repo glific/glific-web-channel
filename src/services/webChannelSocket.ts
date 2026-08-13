@@ -38,16 +38,17 @@ export interface LocationRequestContent {
   action?: { name?: string };
 }
 
-// The custom UI envelope (contract §3). `props` is opaque to the transport layer — each
-// registered renderer knows the shape of its own props. `answered` / `answer_summary` are
-// written into the stored content by the backend once a response is accepted, so a reloaded
-// history renders the block in its true answered state.
-export interface CustomUiContent {
-  type: 'custom_ui';
-  version?: string;
+// The Blocks envelope (contract §3). Typed prop nodes are unwrapped by the backend at send
+// time (§2.2), so every value here is already a plain scalar/list — `props` is opaque to the
+// transport layer and each registered renderer knows the shape of its own props.
+// `answered` / `answer_summary` are written into the stored content by the backend once a
+// response is accepted, so a reloaded history renders the block in its true answered state.
+// There is no `fallback` field in v1 (§9) — the message's own `body` is the derived text.
+export interface BlocksContent {
+  type: 'blocks';
+  version?: number;
   component: string;
   props?: Record<string, unknown>;
-  fallback?: string;
   context?: Record<string, unknown>;
   answered?: boolean;
   answer_summary?: string | null;
@@ -57,7 +58,7 @@ export type InteractiveContent =
   | QuickReplyContent
   | ListContent
   | LocationRequestContent
-  | CustomUiContent;
+  | BlocksContent;
 
 // The media payload as it arrives on a message over the socket (the serializer emits `{ url }`;
 // content_type is filled in for optimistic bubbles the widget builds locally).
@@ -190,10 +191,10 @@ export const pushNewLocationMessage = (
       .receive('timeout', () => reject(new Error('new_location_message timeout')));
   });
 
-// A structured answer to a custom_ui block (contract §4). NOT a text message: `summary` is the
+// A structured answer to a blocks message (contract §4). NOT a text message: `summary` is the
 // human-readable string persisted as the message body, `values` is what the flow reads.
-export interface CustomUiResponse {
-  // the server id of the outbound custom_ui message; the backend guards on `is_integer`, so an
+export interface BlocksResponse {
+  // the server id of the outbound blocks message; the backend guards on `is_integer`, so an
   // optimistic `local-…` id must never reach here
   message_id: number;
   component: string;
@@ -202,13 +203,13 @@ export interface CustomUiResponse {
   context?: Record<string, unknown>;
 }
 
-export const pushCustomUiResponse = (channel: Channel, response: CustomUiResponse): Promise<unknown> =>
+export const pushBlocksResponse = (channel: Channel, response: BlocksResponse): Promise<unknown> =>
   new Promise((resolve, reject) => {
     channel
-      .push('custom_ui_response', response)
+      .push('blocks_response', response)
       .receive('ok', resolve)
       .receive('error', reject)
-      .receive('timeout', () => reject(new Error('custom_ui_response timeout')));
+      .receive('timeout', () => reject(new Error('blocks_response timeout')));
   });
 
 // request an older page of messages (offset = current message count). Resolves with the page (oldest -> newest).

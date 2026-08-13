@@ -3,26 +3,33 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { InteractiveMessage } from './InteractiveMessage';
-import { register, unregister, type CustomUiRendererProps } from './customUi/registry';
-import { clampSummary, parseFallbackValues, SUMMARY_MAX } from './customUi/values';
-import type { CustomUiContent } from '@/services/webChannelSocket';
+import { register, unregister, type BlocksRendererProps } from './blocks/registry';
+import { clampSummary, parseFallbackValues, SUMMARY_MAX } from './blocks/values';
+import type { BlocksContent } from '@/services/webChannelSocket';
 
-const envelope = (overrides: Partial<CustomUiContent>): CustomUiContent => ({
-  type: 'custom_ui',
-  version: '1',
-  component: 'glific/image_panel',
-  fallback: 'Pick a course',
+const envelope = (overrides: Partial<BlocksContent>): BlocksContent => ({
+  type: 'blocks',
+  version: 1,
+  component: 'glific/image-panel',
   props: {},
   ...overrides,
 });
 
-const renderBlock = (content: CustomUiContent, onCustomUiResponse = vi.fn()) => {
-  render(<InteractiveMessage content={content} messageId={4211} onCustomUiResponse={onCustomUiResponse} />);
-  return onCustomUiResponse;
+// `body` is the backend-derived text (§9) that replaced v0's `fallback` envelope field.
+const renderBlock = (content: BlocksContent, onBlocksResponse = vi.fn(), body = 'Pick a course') => {
+  render(
+    <InteractiveMessage
+      content={content}
+      messageId={4211}
+      body={body}
+      onBlocksResponse={onBlocksResponse}
+    />
+  );
+  return onBlocksResponse;
 };
 
 const imagePanel = envelope({
-  component: 'glific/image_panel',
+  component: 'glific/image-panel',
   props: {
     id: 'course',
     body: 'Pick a course',
@@ -33,11 +40,11 @@ const imagePanel = envelope({
   },
 });
 
-describe('custom_ui / glific/image_panel', () => {
+describe('blocks / glific/image-panel', () => {
   it('renders one tappable option per props.options entry', () => {
     renderBlock(imagePanel);
 
-    expect(screen.getByTestId('customUiImagePanel')).toBeInTheDocument();
+    expect(screen.getByTestId('blocksImagePanel')).toBeInTheDocument();
     expect(screen.getAllByTestId('imagePanelOption')).toHaveLength(2);
     // the option label is the button's accessible name
     expect(screen.getByRole('button', { name: 'Digital skills' })).toBeInTheDocument();
@@ -51,7 +58,7 @@ describe('custom_ui / glific/image_panel', () => {
 
     expect(onRespond).toHaveBeenCalledWith({
       message_id: 4211,
-      component: 'glific/image_panel',
+      component: 'glific/image-panel',
       values: { course: 'c2' },
       summary: 'Digital skills',
     });
@@ -74,18 +81,55 @@ describe('custom_ui / glific/image_panel', () => {
 
     expect(onRespond).toHaveBeenCalledTimes(1);
     screen.getAllByTestId('imagePanelOption').forEach((button) => expect(button).toBeDisabled());
-    expect(screen.getByTestId('customUiAnswerSummary')).toHaveTextContent('Spoken English');
+    expect(screen.getByTestId('blocksAnswerSummary')).toHaveTextContent('Spoken English');
+  });
+
+  it('renders image_alt as the img alt without changing the button accessible name', () => {
+    renderBlock(
+      envelope({
+        component: 'glific/image-panel',
+        props: {
+          id: 'course',
+          options: [
+            {
+              id: 'c1',
+              image: 'https://cdn/english.png',
+              image_alt: 'Adult English class',
+              label: 'Spoken English',
+            },
+          ],
+        },
+      })
+    );
+
+    expect(screen.getByAltText('Adult English class')).toBeInTheDocument();
+    // the option label stays the button's whole accessible name (exact match)
+    expect(screen.getByRole('button', { name: 'Spoken English' })).toBeInTheDocument();
+  });
+
+  it('leaves the image decorative when image_alt is absent', () => {
+    renderBlock(imagePanel);
+
+    document
+      .querySelectorAll('img')
+      .forEach((img) => expect(img).toHaveAttribute('alt', ''));
   });
 });
 
-describe('custom_ui / glific/carousel', () => {
+describe('blocks / glific/carousel', () => {
   const carousel = envelope({
     component: 'glific/carousel',
     props: {
       id: 'product',
       body: 'Browse our courses',
       cards: [
-        { id: 'p1', image: 'https://cdn/a.png', title: 'Course A', description: 'Six weeks, evenings' },
+        {
+          id: 'p1',
+          image: 'https://cdn/a.png',
+          image_alt: 'Students at desks',
+          title: 'Course A',
+          description: 'Six weeks, evenings',
+        },
         { id: 'p2', image: 'https://cdn/b.png', title: 'Course B' },
       ],
     },
@@ -96,6 +140,15 @@ describe('custom_ui / glific/carousel', () => {
 
     expect(screen.getAllByTestId('carouselCard')).toHaveLength(2);
     expect(screen.getByText('Six weeks, evenings')).toBeInTheDocument();
+  });
+
+  it('renders image_alt as the card img alt, decorative when absent', () => {
+    renderBlock(carousel);
+
+    expect(screen.getByAltText('Students at desks')).toBeInTheDocument();
+    // the second card has no image_alt — it stays decorative
+    expect(document.querySelectorAll('img[alt=""]')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Select Course A' })).toBeInTheDocument();
   });
 
   it('emits the selected card id under props.id with the card title as the summary', async () => {
@@ -112,7 +165,7 @@ describe('custom_ui / glific/carousel', () => {
   });
 });
 
-describe('custom_ui / glific/form', () => {
+describe('blocks / glific/form', () => {
   const form = envelope({
     component: 'glific/form',
     props: {
@@ -169,24 +222,34 @@ describe('custom_ui / glific/form', () => {
   });
 });
 
-describe('custom_ui fallback card', () => {
+describe('blocks fallback card', () => {
   const unknown = envelope({
     component: 'tap/attendance',
-    fallback: 'Were you present today?',
     props: { anything: true },
   });
 
-  it('shows the component name, the fallback text and a lenient input', () => {
-    renderBlock(unknown);
+  const renderUnknown = (onRespond = vi.fn()) =>
+    renderBlock(unknown, onRespond, 'Were you present today?');
 
-    expect(screen.getByTestId('customUiFallback')).toBeInTheDocument();
+  it('shows the component name, the derived body and a lenient input', () => {
+    renderUnknown();
+
+    expect(screen.getByTestId('blocksFallback')).toBeInTheDocument();
     expect(screen.getByText('Interactive · tap/attendance')).toBeInTheDocument();
     expect(screen.getByText('Were you present today?')).toBeInTheDocument();
     expect(screen.getByTestId('fallbackInput')).toBeInTheDocument();
   });
 
+  // §9: a Custom Block with no text nodes derives an empty body — still answerable.
+  it('still renders the input when the derived body is empty', () => {
+    renderBlock(unknown, vi.fn(), '');
+
+    expect(screen.queryByTestId('blocksText')).not.toBeInTheDocument();
+    expect(screen.getByTestId('fallbackInput')).toBeInTheDocument();
+  });
+
   it('sends plain text as { input: text }', async () => {
-    const onRespond = renderBlock(unknown);
+    const onRespond = renderUnknown();
 
     await userEvent.type(screen.getByTestId('fallbackInput'), 'yes');
     await userEvent.click(screen.getByTestId('fallbackSubmit'));
@@ -200,7 +263,7 @@ describe('custom_ui fallback card', () => {
   });
 
   it('sends a typed JSON object verbatim as values', async () => {
-    const onRespond = renderBlock(unknown);
+    const onRespond = renderUnknown();
 
     await userEvent.type(screen.getByTestId('fallbackInput'), '{{"present":true}');
     await userEvent.click(screen.getByTestId('fallbackSubmit'));
@@ -218,41 +281,46 @@ describe('custom_ui fallback card', () => {
   });
 });
 
-describe('custom_ui answered state', () => {
+describe('blocks answered state', () => {
   it('renders disabled with the server answer_summary when answered is true', () => {
     const onRespond = renderBlock(
       envelope({ ...imagePanel, answered: true, answer_summary: 'Digital skills' })
     );
 
     screen.getAllByTestId('imagePanelOption').forEach((button) => expect(button).toBeDisabled());
-    expect(screen.getByTestId('customUiAnswerSummary')).toHaveTextContent('Digital skills');
-    expect(screen.getByTestId('customUiBlock')).toHaveAttribute('data-answered', 'true');
+    expect(screen.getByTestId('blocksAnswerSummary')).toHaveTextContent('Digital skills');
+    expect(screen.getByTestId('blocksMessage')).toHaveAttribute('data-answered', 'true');
     expect(onRespond).not.toHaveBeenCalled();
   });
 
   it('re-enables the block when the response push is rejected', async () => {
     const onRespond = vi.fn(() => Promise.reject(new Error('already_answered')));
-    render(<InteractiveMessage content={imagePanel} messageId={4211} onCustomUiResponse={onRespond} />);
+    render(<InteractiveMessage content={imagePanel} messageId={4211} onBlocksResponse={onRespond} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Digital skills' }));
 
     // the server refused, so the truth is still "unanswered" — let the contact try again
     await waitFor(() => expect(screen.getByRole('button', { name: 'Digital skills' })).toBeEnabled());
-    expect(screen.queryByTestId('customUiAnswerSummary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('blocksAnswerSummary')).not.toBeInTheDocument();
 
     // ...and a retry really does push again (the single-submit guard was released too)
     await userEvent.click(screen.getByRole('button', { name: 'Digital skills' }));
     expect(onRespond).toHaveBeenCalledTimes(2);
   });
 
-  it('renders only the fallback text when the bubble has no numeric server id', () => {
+  it('renders only the derived body when the bubble has no numeric server id', () => {
     const onRespond = vi.fn();
     render(
-      <InteractiveMessage content={imagePanel} messageId="local-123" onCustomUiResponse={onRespond} />
+      <InteractiveMessage
+        content={imagePanel}
+        messageId="local-123"
+        body="Pick a course"
+        onBlocksResponse={onRespond}
+      />
     );
 
     // §4's message_id must be the numeric server id, so there is nothing safe to answer with
-    expect(screen.queryByTestId('customUiBlock')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('blocksMessage')).not.toBeInTheDocument();
     expect(screen.getByText('Pick a course')).toBeInTheDocument();
   });
 
@@ -260,7 +328,7 @@ describe('custom_ui answered state', () => {
     renderBlock(envelope({ ...imagePanel, answered: false, answer_summary: null }));
 
     expect(screen.getByRole('button', { name: 'Digital skills' })).toBeEnabled();
-    expect(screen.queryByTestId('customUiAnswerSummary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('blocksAnswerSummary')).not.toBeInTheDocument();
   });
 });
 
@@ -293,13 +361,13 @@ describe('clampSummary (contract §7)', () => {
   });
 });
 
-describe('custom_ui renderer registry', () => {
+describe('blocks renderer registry', () => {
   afterEach(() => unregister('tap/attendance'));
 
   it('pushes only once when a renderer submits twice in the same tick', async () => {
     // `answered` is derived from state, so both calls see the old value — only a synchronous
     // guard stops the second push (whose rejection would roll back the accepted first answer).
-    const Double = ({ onSubmit }: CustomUiRendererProps) => (
+    const Double = ({ onSubmit }: BlocksRendererProps) => (
       <button
         type="button"
         data-testid="tapAttendance"
@@ -321,7 +389,7 @@ describe('custom_ui renderer registry', () => {
   });
 
   it('prefers a registered renderer over the generic fallback card', async () => {
-    const Custom = ({ onSubmit }: CustomUiRendererProps) => (
+    const Custom = ({ onSubmit }: BlocksRendererProps) => (
       <button type="button" data-testid="tapAttendance" onClick={() => onSubmit({ values: { present: true }, summary: 'Present' })}>
         Present
       </button>
@@ -330,7 +398,7 @@ describe('custom_ui renderer registry', () => {
 
     const onRespond = renderBlock(envelope({ component: 'tap/attendance' }));
 
-    expect(screen.queryByTestId('customUiFallback')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('blocksFallback')).not.toBeInTheDocument();
     await userEvent.click(screen.getByTestId('tapAttendance'));
 
     expect(onRespond).toHaveBeenCalledWith(

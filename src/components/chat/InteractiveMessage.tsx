@@ -10,10 +10,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CustomUiBlock } from '@/components/chat/customUi/CustomUiBlock';
+import { BlocksMessage } from '@/components/chat/blocks/BlocksMessage';
 import { whatsappToJsx } from '@/lib/whatsapp';
 import type {
-  CustomUiResponse,
+  BlocksResponse,
   InteractiveContent,
   ListContent,
   LocationRequestContent,
@@ -29,21 +29,25 @@ import type {
 // disable the controls locally so a second tap can't advance the flow twice (the widget user,
 // unlike the read-only staff view, can actually click).
 //
-// A `custom_ui` envelope is the exception: it is rendered by CustomUiBlock and answered with a
-// structured `custom_ui_response` push (contract §4) via `onCustomUiResponse` — NOT a text
+// A `blocks` envelope is the exception: it is rendered by BlocksMessage and answered with a
+// structured `blocks_response` push (contract §4) via `onBlocksResponse` — NOT a text
 // reply — which is why it needs the message id.
 export interface InteractiveMessageProps {
   content: InteractiveContent;
   messageId: number | string;
+  // the message's `body` — for a blocks message this is the backend-derived text (§9), which
+  // replaced v0's `fallback` envelope field
+  body?: string;
   onReply?: (title: string) => void;
-  onCustomUiResponse?: (response: CustomUiResponse) => Promise<unknown> | void;
+  onBlocksResponse?: (response: BlocksResponse) => Promise<unknown> | void;
 }
 
 export const InteractiveMessage = ({
   content,
   messageId,
+  body,
   onReply,
-  onCustomUiResponse,
+  onBlocksResponse,
 }: InteractiveMessageProps) => {
   const [replied, setReplied] = useState(false);
 
@@ -54,17 +58,24 @@ export const InteractiveMessage = ({
   };
 
   switch (content.type) {
-    case 'custom_ui':
-      // §4's message_id is the numeric server id of the message being answered. A custom_ui
+    case 'blocks':
+      // §4's message_id is the numeric server id of the message being answered. A blocks
       // bubble only ever arrives from the server, so a non-numeric (optimistic `local-…`) id
-      // here means something upstream is wrong — render the fallback text rather than push an
+      // here means something upstream is wrong — render the derived body rather than push an
       // id the backend would reject.
       if (typeof messageId !== 'number') {
-        return content.fallback ? (
-          <div className="break-words whitespace-pre-wrap">{whatsappToJsx(content.fallback)}</div>
+        return body ? (
+          <div className="break-words whitespace-pre-wrap">{whatsappToJsx(body)}</div>
         ) : null;
       }
-      return <CustomUiBlock messageId={messageId} content={content} onRespond={onCustomUiResponse} />;
+      return (
+        <BlocksMessage
+          messageId={messageId}
+          content={content}
+          body={body}
+          onRespond={onBlocksResponse}
+        />
+      );
     case 'quick_reply':
       return <QuickReply content={content} disabled={replied} onSelect={reply} />;
     case 'list':

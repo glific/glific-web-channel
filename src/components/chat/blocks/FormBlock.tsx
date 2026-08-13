@@ -1,8 +1,8 @@
 import { useId, useState } from 'react';
 
-import { BlockInput, BlockShell } from '@/components/chat/customUi/primitives';
-import { clampSummary } from '@/components/chat/customUi/values';
-import type { CustomUiRendererProps } from '@/components/chat/customUi/registry';
+import { BlockInput, BlockShell } from '@/components/chat/blocks/primitives';
+import { clampSummary } from '@/components/chat/blocks/values';
+import type { BlocksRendererProps } from '@/components/chat/blocks/registry';
 import { Button } from '@/components/ui/button';
 
 // `glific/form` (contract §6): inline labelled text fields + submit button (v0 input is text only).
@@ -27,7 +27,7 @@ export interface FormBlockProps {
   submit_label?: string;
 }
 
-export const FormBlock = ({ content, disabled, onSubmit }: CustomUiRendererProps) => {
+export const FormBlock = ({ content, disabled, onSubmit }: BlocksRendererProps) => {
   const props = (content.props ?? {}) as FormBlockProps;
   const fields = Array.isArray(props.fields) ? props.fields : [];
   const [values, setValues] = useState<Record<string, string>>({});
@@ -55,7 +55,7 @@ export const FormBlock = ({ content, disabled, onSubmit }: CustomUiRendererProps
   };
 
   return (
-    <BlockShell testId="customUiForm" body={props.body ?? content.fallback}>
+    <BlockShell testId="blocksForm" body={props.body}>
       <div className="flex flex-col gap-2">
         {fields.map((field, i) => (
           <BlockInput

@@ -1,14 +1,15 @@
-import { BlockOption, BlockShell } from '@/components/chat/customUi/primitives';
-import { clampSummary } from '@/components/chat/customUi/values';
-import type { CustomUiRendererProps } from '@/components/chat/customUi/registry';
+import { BlockOption, BlockShell } from '@/components/chat/blocks/primitives';
+import { clampSummary } from '@/components/chat/blocks/values';
+import type { BlocksRendererProps } from '@/components/chat/blocks/registry';
 
-// `glific/image_panel` (contract §6): a grid of tappable images with labels, single-select.
-//   props: { id, body?, options: [{ id, image, label }] }
+// `glific/image-panel` (contract §6): a grid of tappable images with labels, single-select.
+//   props: { id, body?, options: [{ id, image, image_alt?, label }] }
 //   values:  { "<props.id>": "<selected option id>" }
 //   summary: the selected option's label
 export interface ImagePanelOption {
   id: string;
   image?: string;
+  image_alt?: string;
   label: string;
 }
 
@@ -18,7 +19,7 @@ export interface ImagePanelProps {
   options?: ImagePanelOption[];
 }
 
-export const ImagePanel = ({ content, disabled, onSubmit }: CustomUiRendererProps) => {
+export const ImagePanel = ({ content, disabled, onSubmit }: BlocksRendererProps) => {
   const props = (content.props ?? {}) as ImagePanelProps;
   const key = props.id || 'selection';
   const options = Array.isArray(props.options) ? props.options : [];
@@ -32,13 +33,14 @@ export const ImagePanel = ({ content, disabled, onSubmit }: CustomUiRendererProp
   };
 
   return (
-    <BlockShell testId="customUiImagePanel" body={props.body ?? content.fallback}>
+    <BlockShell testId="blocksImagePanel" body={props.body}>
       <div className="grid grid-cols-2 gap-2">
         {options.map((option, i) => (
           <BlockOption
             key={option.id ?? `option-${i}`}
             label={option.label}
             image={option.image}
+            imageAlt={option.image_alt}
             disabled={disabled}
             testId="imagePanelOption"
             onSelect={() => select(option)}

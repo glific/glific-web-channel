@@ -3,14 +3,14 @@ import { MapPin } from 'lucide-react';
 import { InteractiveMessage } from '@/components/chat/InteractiveMessage';
 import { cn } from '@/lib/utils';
 import { formatShortTime, whatsappToJsx } from '@/lib/whatsapp';
-import type { CustomUiResponse, InteractiveContent, WebChannelMessage } from '@/services/webChannelSocket';
+import type { BlocksResponse, InteractiveContent, WebChannelMessage } from '@/services/webChannelSocket';
 
 export interface MessageBubbleProps {
   message: WebChannelMessage;
   // reply to a tapped interactive option; routed through the composer's optimistic send path
   onInteractiveReply?: (title: string) => void;
-  // structured answer to a custom_ui block (contract §4) — a separate path from the text reply
-  onCustomUiResponse?: (response: CustomUiResponse) => Promise<unknown> | void;
+  // structured answer to a blocks message (contract §4) — a separate path from the text reply
+  onBlocksResponse?: (response: BlocksResponse) => Promise<unknown> | void;
 }
 
 const MEDIA_TYPES = ['image', 'audio', 'video', 'document'];
@@ -55,9 +55,9 @@ const LocationContent = ({ url }: { url: string }) => (
 // A lean single-conversation bubble in the WhatsApp visual style. Self-contained
 // (no staff ChatMessage coupling). Interactive messages (received only) render their own
 // header/text + tappable options instead of the plain body.
-export const MessageBubble = ({ message, onInteractiveReply, onCustomUiResponse }: MessageBubbleProps) => {
+export const MessageBubble = ({ message, onInteractiveReply, onBlocksResponse }: MessageBubbleProps) => {
   // "inbound" = the end user's own message -> sent (right); "outbound" = from NGO/flow -> received (left)
-  // The received-only gate matters for custom_ui too: the persisted inbound custom_ui_response
+  // The received-only gate matters for blocks too: the persisted inbound blocks_response
   // also carries interactive_content, and this is what makes it render as its plain summary body.
   const isSent = message.flow === 'inbound';
   const interactive = isSent ? null : asInteractive(message);
@@ -83,8 +83,9 @@ export const MessageBubble = ({ message, onInteractiveReply, onCustomUiResponse 
             <InteractiveMessage
               content={interactive}
               messageId={message.id}
+              body={message.body}
               onReply={onInteractiveReply}
-              onCustomUiResponse={onCustomUiResponse}
+              onBlocksResponse={onBlocksResponse}
             />
           ) : isMedia ? (
             <MediaContent type={message.type as string} url={mediaUrl as string} caption={message.body} />

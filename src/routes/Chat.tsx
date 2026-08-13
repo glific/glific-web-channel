@@ -15,9 +15,9 @@ import {
   pushNewMessage,
   pushNewMediaMessage,
   pushNewLocationMessage,
-  pushCustomUiResponse,
+  pushBlocksResponse,
   pushUpdateName,
-  type CustomUiResponse,
+  type BlocksResponse,
   type OutboundMediaType,
   type WebChannelMessage,
 } from '@/services/webChannelSocket';
@@ -245,17 +245,17 @@ export const Chat = () => {
     return String(optimistic.id);
   };
 
-  // Answer a custom_ui block: a structured push, not a text message. The contact's own bubble
+  // Answer a blocks message: a structured push, not a text message. The contact's own bubble
   // is the summary string (which is exactly what the backend persists as the message body), so
   // the optimistic bubble matches what a reload will show.
   // A rejection here is NOT the same as a queued text message: the server can refuse the answer
   // (unknown/already-answered message) or never reply at all, and both must be visible instead
   // of looking exactly like success. Rethrow so the block re-enables itself.
-  const sendCustomUiResponse = (response: CustomUiResponse): Promise<unknown> => {
+  const sendBlocksResponse = (response: BlocksResponse): Promise<unknown> => {
     if (!channelRef.current) return Promise.reject(new Error('not connected'));
     setUploadError(null);
-    const optimisticId = appendOptimistic({ body: response.summary, type: 'custom_ui_response' });
-    return pushCustomUiResponse(channelRef.current, response).catch((reason) => {
+    const optimisticId = appendOptimistic({ body: response.summary, type: 'blocks_response' });
+    return pushBlocksResponse(channelRef.current, response).catch((reason) => {
       // roll the bubble back — the answer was not accepted, so nothing was said
       setMessages((prev) => prev.filter((m) => String(m.id) !== optimisticId));
       setUploadError('Could not send your answer. Please try again.');
@@ -364,7 +364,7 @@ export const Chat = () => {
               key={message.id}
               message={message}
               onInteractiveReply={sendBody}
-              onCustomUiResponse={sendCustomUiResponse}
+              onBlocksResponse={sendBlocksResponse}
             />
           ))}
         </div>
