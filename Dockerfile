@@ -3,7 +3,7 @@
 # Vite inlines import.meta.env.VITE_* at BUILD time, so the backend URL must be
 # passed as build args (Bunnyshell fills these from the backend component's public
 # URL — see bunnyshell.yaml). There is no dev proxy in this image.
-ARG NODE_VERSION=22.23.1
+ARG NODE_VERSION=24.20.0
 
 FROM node:${NODE_VERSION}-alpine AS build
 WORKDIR /app

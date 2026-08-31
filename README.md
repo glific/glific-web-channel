@@ -15,17 +15,21 @@ It talks to the Glific backend over **REST** (OTP auth) and a **Phoenix websocke
 - **react-hook-form + zod** (forms/validation)
 - **phoenix** JS client (realtime), **axios** (REST)
 - **Vitest + React Testing Library** (tests)
-- Package manager: **yarn** · Node pinned via `.tool-versions` (22.23.1)
+- Package manager: **yarn** · Node pinned via `.tool-versions` (24.20.0)
 
 ## Getting started
 
 ```bash
 yarn install
-yarn dev        # http://localhost:5173
+yarn dev        # https://glific.test:5173 (trusted mkcert cert via vite-plugin-mkcert)
 ```
 
+The dev server runs on **https://glific.test:5173** — add `127.0.0.1 glific.test` to
+`/etc/hosts` if needed. On first run, `vite-plugin-mkcert` may prompt to install its
+local CA. Generated certs are saved under `certs/` (gitignored).
+
 The dev server proxies `/api` and `/web_socket` to the Glific backend on
-`http://localhost:4000` (see `vite.config.ts`). Start the backend first. The login OTP in
+`https://localhost:4001` (see `vite.config.ts`). Start the backend first. The login OTP in
 the prototype is **9999**.
 
 ### Scripts
@@ -47,6 +51,27 @@ paths + the Vite proxy handle everything. In **prod**, set (see `.env.example`):
 VITE_GLIFIC_API_URL=https://api.<org>.glific.com/api
 VITE_WEB_SOCKET=wss://api.<org>.glific.com/web_socket
 ```
+
+## Deploy on Vercel
+
+This repo is configured for [Vercel](https://vercel.com) as a static Vite SPA (`vercel.json`).
+
+1. Import the repository in the Vercel dashboard (or run `vercel` from the project root).
+2. Vercel detects **Vite** automatically. Build settings are pinned in `vercel.json`:
+   - **Install:** `yarn install`
+   - **Build:** `yarn build`
+   - **Output:** `dist`
+3. Add **Environment Variables** for production (required — Vite inlines `VITE_*` at build time):
+
+   | Variable | Example |
+   |---|---|
+   | `VITE_GLIFIC_API_URL` | `https://api.your-org.glific.com/api` |
+   | `VITE_WEB_SOCKET` | `wss://api.your-org.glific.com/web_socket` |
+
+   Apply them to **Production** (and Preview if previews should hit a real backend).
+4. Deploy. Client-side routes (`/login`, `/chat`) are rewritten to `index.html` so hard refreshes work.
+
+Node **24.20.0** is pinned via `.nvmrc` and `package.json` `engines`.
 
 ## Structure
 
