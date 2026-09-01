@@ -42,6 +42,23 @@ the prototype is **9999**.
 | `yarn test:watch` | Watch mode |
 | `yarn lint` | Lint (oxlint) |
 
+## The standard agent workflow
+
+`CLAUDE.md` is the conventions doc for this repo — deployment model, layering, UI and realtime
+rules, testing. Feature work runs through four Claude Code agents in `.claude/agents/`, the same
+four in every ProjectTech4Dev repo. Use them rather than ad-hoc prompting.
+
+| Agent | Takes | Produces |
+|-------|-------|----------|
+| `planner` | a rough plan, ticket, or feature request | a detailed implementation plan at `plans/<slug>.md` |
+| `engineer` | that plan | the implementation |
+| `test-engineer` | the implementation | the test layer (Vitest) |
+| `reviewer` | the diff + the plan + the original request | a prioritised review verdict |
+
+Skip the planner only for changes small enough to hold in one file. The reviewer checks the diff
+against the plan first, so a plan that names real files and testable acceptance criteria is what
+makes the rest of the chain work.
+
 ## Configuration
 
 Endpoints are resolved in `src/config.ts`. In **dev** leave the env vars unset — relative

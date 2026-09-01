@@ -30,3 +30,7 @@ dist-ssr
 
 # Local dev TLS certs (mkcert)
 /certs
+
+# Claude Code — keep .claude/agents tracked, ignore local worktrees and settings
+.claude/worktrees/
+.claude/settings.local.json
