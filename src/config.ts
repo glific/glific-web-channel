@@ -13,8 +13,9 @@ const API_BASE: string = import.meta.env.VITE_GLIFIC_API_URL || '/api';
 // window.location, so the relative default proxies transparently in dev.
 export const WEB_SOCKET: string = import.meta.env.VITE_WEB_SOCKET || '/web_socket';
 
-// NGO/org display name used for branding on the login screen (mirrors staff Auth).
-export const ORGANIZATION_NAME = `${API_BASE}/v1/session/name`;
+// Per-org branding (accent, logo, display name). Public: fetched before login, and the org is
+// resolved server-side from the request host, so one build serves every NGO.
+export const WEB_CHANNEL_THEME = `${API_BASE}/v1/web_channel/theme`;
 
 // Public OTP auth endpoints (prototype: server does not actually send an SMS).
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;

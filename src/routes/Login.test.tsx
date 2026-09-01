@@ -3,11 +3,21 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import axios from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { ORGANIZATION_NAME, WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
+import { WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
 import { Login } from './Login';
 
 vi.mock('axios');
 const mockedAxios = axios as any;
+
+// The theme is resolved in main.tsx before the first render, so components read it
+// synchronously. Stub the store rather than the fetch.
+vi.mock('@/services/theme', () => ({
+  getTheme: () => ({
+    theme: 'violet',
+    logo_url: 'https://cdn.example.org/logo.svg',
+    display_name: 'Test NGO',
+  }),
+}));
 
 const renderLogin = () =>
   render(
@@ -24,9 +34,6 @@ describe('<Login />', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockedAxios.post.mockImplementation((url: string) => {
-      if (url === ORGANIZATION_NAME) {
-        return Promise.resolve({ data: { data: { name: 'Test NGO', status: 'active' } } });
-      }
       if (url === WEB_CHANNEL_REQUEST_OTP) {
         return Promise.resolve({ data: { data: { phone: '919999999999', message: 'sent' } } });
       }
@@ -39,11 +46,12 @@ describe('<Login />', () => {
     });
   });
 
-  it('renders the phone step with the NGO name and "powered by Glific" branding', async () => {
+  it('renders the phone step with the NGO logo, name and "powered by Glific" branding', async () => {
     const { container } = renderLogin();
 
     // branding
     await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+    expect(screen.getByTestId('orgLogo')).toHaveAttribute('src', 'https://cdn.example.org/logo.svg');
     expect(screen.getByText('powered by Glific')).toBeInTheDocument();
 
     // phone step is shown

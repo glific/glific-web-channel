@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { EditName } from '@/components/chat/EditName';
+import { Logo } from '@/components/branding/Logo';
 import {
   connectAndJoin,
   disconnect,
@@ -167,7 +168,10 @@ export const Chat = () => {
   return (
     <div className="mx-auto flex h-[100svh] w-full max-w-2xl flex-col bg-background" data-testid="webChannelChat">
       <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
-        <EditName name={name} onSave={handleRename} />
+        <div className="flex min-w-0 items-center gap-2">
+          <Logo className="h-7 max-w-[7rem] shrink-0 object-contain" />
+          <EditName name={name} onSave={handleRename} />
+        </div>
         <div className="flex items-center gap-3">
           {connectionState !== 'open' && (
             <span className="text-xs text-muted-foreground" data-testid="connectionStatus">
