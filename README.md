@@ -44,8 +44,9 @@ the prototype is **9999**.
 
 ## The standard agent workflow
 
-Feature work runs through four Claude Code agents in `.claude/agents/`, the same four in every
-ProjectTech4Dev repo. Use them rather than ad-hoc prompting.
+`CLAUDE.md` is the conventions doc for this repo — deployment model, layering, UI and realtime
+rules, testing. Feature work runs through four Claude Code agents in `.claude/agents/`, the same
+four in every ProjectTech4Dev repo. Use them rather than ad-hoc prompting.
 
 | Agent | Takes | Produces |
 |-------|-------|----------|

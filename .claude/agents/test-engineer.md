@@ -38,7 +38,8 @@ You are the **test-engineer**.
   `@testing-library/jest-dom/vitest`).
 - Existing tests to mirror: `src/App.test.tsx`, `src/routes/Login.test.tsx`,
   `src/services/webChannelSocket.test.ts`. Read the nearest one before writing a new one.
-- `README.md` is the closest thing this repo has to a `CLAUDE.md`.
+- The root `CLAUDE.md` is the source of truth for the conventions you are testing around — the
+  service layering, the realtime contract, and the testing rules below.
 
 ```bash
 yarn test            # vitest run

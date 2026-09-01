@@ -35,8 +35,9 @@ You are the **engineer**. Work from the plan.
 
 ## Stack & ground truth
 
-There is no `CLAUDE.md` in this repo; `README.md` is the closest thing to one. Read it, then read
-the code before you touch it.
+**Read the root `CLAUDE.md` before coding** — it is the source of truth for commands, the
+deployment model, layering, UI conventions, the realtime contract, and testing. `README.md` covers
+setup and deploy. Then read the code before you touch it.
 
 - **React 19 + Vite + TypeScript**, **Tailwind CSS v4** + **shadcn/ui** (Radix primitives, owned
   in-repo under `src/components/ui/`), **react-hook-form + zod**, the **phoenix** JS client for

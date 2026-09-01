@@ -50,7 +50,10 @@ visual-judgement item verified on the strength of the code reading alone.
 
 ## How to run
 
-1. Get the diff: `git diff master...HEAD` (or `gh pr diff <n>` for a numbered PR).
+0. Read the root `CLAUDE.md` — it defines "correct" here. Cite the specific convention a finding
+   violates.
+1. Get the diff: `git diff main...HEAD` (this repo's default branch is `main`), or
+   `gh pr diff <n>` for a numbered PR.
 2. Read changed files in full where needed — don't judge from a hunk alone.
 3. Verify every finding against current code before reporting; drop anything that doesn't hold up.
 

@@ -28,7 +28,9 @@ doesn't" without interpretation.
 
 ## Ground truth — read before planning
 
-This repo has no `CLAUDE.md`; `README.md` is the closest thing to one. Read it, then the code:
+Read the root `CLAUDE.md` first — it is the source of truth for commands, the deployment model,
+layering, UI conventions, the realtime contract, and testing. `README.md` covers setup and
+deploy. Then read the code:
 
 - `src/config.ts` — how backend endpoints are resolved.
 - `src/services/webChannelSocket.ts` — the Phoenix socket: join, send, load-more, rename.
