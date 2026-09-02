@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
 
-import { REAP_BENEFIT, serveTheme } from './support/theme';
+import { DARK_ACCENT_ORG, serveTheme } from './support/theme';
 
 test.describe('the widget loads', () => {
   test('an unauthenticated visitor lands on the login screen', async ({ page }) => {
-    await serveTheme(page, REAP_BENEFIT);
+    await serveTheme(page, DARK_ACCENT_ORG);
 
     await page.goto('/');
 

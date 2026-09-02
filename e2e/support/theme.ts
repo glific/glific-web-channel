@@ -34,17 +34,18 @@ export const serveThemeNotFound = (page: Page) =>
 export const rootVar = (page: Page, name: string) =>
   page.evaluate((property) => getComputedStyle(document.documentElement).getPropertyValue(property).trim(), name);
 
-export const REAP_BENEFIT: OrgTheme = {
+// Two fictional orgs, named after what they exercise rather than after any real NGO. Violet is
+// a dark accent and Amber a light one, so between them they cover both foreground cases.
+export const DARK_ACCENT_ORG: OrgTheme = {
   theme: 'violet',
-  logo_url: 'https://cdn.example.org/reap-benefit.svg',
-  display_name: 'Reap Benefit',
+  logo_url: 'https://cdn.example.org/violet.svg',
+  display_name: 'Violet NGO',
 };
 
-// A deliberately light accent, so the pair below covers both foreground cases.
-export const SUNSHINE_TRUST: OrgTheme = {
+export const LIGHT_ACCENT_ORG: OrgTheme = {
   theme: 'amber',
-  logo_url: 'https://cdn.example.org/sunshine.svg',
-  display_name: 'Sunshine Trust',
+  logo_url: 'https://cdn.example.org/amber.svg',
+  display_name: 'Amber NGO',
 };
 
 /**
@@ -76,3 +77,18 @@ export const buttonContrast = (page: Page, testId = 'phoneSubmit') =>
     const [lighter, darker] = [luminance(style.color), luminance(style.backgroundColor)].sort((a, b) => b - a);
     return (lighter + 0.05) / (darker + 0.05);
   }, testId);
+
+/**
+ * Assert the logo is rendered as a circle.
+ *
+ * Checked numerically rather than against a literal `border-radius`: Tailwind v4's
+ * `rounded-full` computes to `calc(infinity * 1px)`, which serialises as `3.35544e+07px`.
+ * A radius of at least half the box, on a square box, is what "circle" actually means.
+ */
+export const expectCircularLogo = async (page: Page) => {
+  const logo = page.getByTestId('orgLogo');
+  const box = (await logo.boundingBox())!;
+  const radius = await logo.evaluate((element) => parseFloat(getComputedStyle(element).borderRadius));
+
+  return { width: box.width, height: box.height, radius };
+};

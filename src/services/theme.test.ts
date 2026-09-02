@@ -15,7 +15,7 @@ describe('applyTheme', () => {
   });
 
   it('overrides the raw --primary vars, not the @theme inline --color-* aliases', () => {
-    applyTheme({ theme: 'violet', logo_url: null, display_name: 'Reap Benefit' });
+    applyTheme({ theme: 'violet', logo_url: null, display_name: 'Example NGO' });
 
     const root = document.documentElement.style;
     expect(root.getPropertyValue('--primary')).toBe(THEMES.violet.primary);
@@ -25,7 +25,7 @@ describe('applyTheme', () => {
   });
 
   it('applies the light-accent theme with dark button text', () => {
-    applyTheme({ theme: 'amber', logo_url: null, display_name: 'Sunshine Trust' });
+    applyTheme({ theme: 'amber', logo_url: null, display_name: 'Example NGO' });
 
     const root = document.documentElement.style;
     expect(root.getPropertyValue('--primary')).toBe(THEMES.amber.primary);
@@ -33,15 +33,15 @@ describe('applyTheme', () => {
   });
 
   it('falls back to the default palette for an unknown theme name', () => {
-    applyTheme({ theme: 'chartreuse', logo_url: null, display_name: 'Reap Benefit' });
+    applyTheme({ theme: 'chartreuse', logo_url: null, display_name: 'Example NGO' });
 
     expect(document.documentElement.style.getPropertyValue('--primary')).toBe(THEMES.zinc.primary);
   });
 
   it('sets the document title from the display name', () => {
-    applyTheme({ theme: 'zinc', logo_url: null, display_name: 'Reap Benefit' });
+    applyTheme({ theme: 'zinc', logo_url: null, display_name: 'Example NGO' });
 
-    expect(document.title).toBe('Reap Benefit — Chat');
+    expect(document.title).toBe('Example NGO — Chat');
   });
 });
 
@@ -49,7 +49,7 @@ describe('fetchTheme', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('unwraps the theme from the endpoint envelope', async () => {
-    const theme = { theme: 'violet', logo_url: null, display_name: 'Reap Benefit' };
+    const theme = { theme: 'violet', logo_url: null, display_name: 'Example NGO' };
     mockedAxios.get.mockResolvedValue({ data: { data: theme } });
 
     await expect(fetchTheme()).resolves.toEqual(theme);
@@ -76,7 +76,7 @@ describe('loadTheme', () => {
   });
 
   it('applies and stores the org theme', async () => {
-    const theme = { theme: 'amber', logo_url: 'https://cdn.example.org/l.svg', display_name: 'Yellow NGO' };
+    const theme = { theme: 'amber', logo_url: 'https://cdn.example.org/l.svg', display_name: 'Example NGO' };
     mockedAxios.get.mockResolvedValue({ data: { data: theme } });
 
     await loadTheme();

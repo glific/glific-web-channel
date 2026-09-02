@@ -61,7 +61,7 @@ export const Login = () => {
     <div className="flex min-h-[100svh] items-center justify-center bg-muted/30 p-4" data-testid="webChannelLogin">
       <Card className="w-full max-w-sm gap-6 p-6">
         <div className="flex flex-col items-center gap-1 text-center">
-          <Logo className="mb-2 h-12 max-w-[12rem] object-contain" />
+          <Logo size={80} className="mb-2" />
           <div className="text-xl font-semibold">{getTheme().display_name}</div>
           <div className="text-xs text-muted-foreground">powered by Glific</div>
         </div>

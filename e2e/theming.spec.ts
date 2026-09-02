@@ -2,10 +2,11 @@ import { expect, test } from '@playwright/test';
 
 import { THEMES } from '../src/services/themes';
 import {
-  REAP_BENEFIT,
-  SUNSHINE_TRUST,
+  DARK_ACCENT_ORG,
+  LIGHT_ACCENT_ORG,
   THEME_ROUTE,
   buttonContrast,
+  expectCircularLogo,
   rootVar,
   serveTheme,
   serveThemeNotFound,
@@ -23,17 +24,17 @@ test.describe('per-org theming', () => {
   // One browser context, one deployment, two tabs — each routed to a different org's /theme.
   // That is the production arrangement: the bundle is identical and only the response differs.
   test('two orgs render their own branding from one build', async ({ context }) => {
-    const reapBenefit = await context.newPage();
-    await serveTheme(reapBenefit, REAP_BENEFIT);
-    await reapBenefit.goto('/login');
+    const darkOrg = await context.newPage();
+    await serveTheme(darkOrg, DARK_ACCENT_ORG);
+    await darkOrg.goto('/login');
 
-    const sunshine = await context.newPage();
-    await serveTheme(sunshine, SUNSHINE_TRUST);
-    await sunshine.goto('/login');
+    const lightOrg = await context.newPage();
+    await serveTheme(lightOrg, LIGHT_ACCENT_ORG);
+    await lightOrg.goto('/login');
 
     for (const [page, org] of [
-      [reapBenefit, REAP_BENEFIT],
-      [sunshine, SUNSHINE_TRUST],
+      [darkOrg, DARK_ACCENT_ORG],
+      [lightOrg, LIGHT_ACCENT_ORG],
     ] as const) {
       await expect(page.getByText(org.display_name)).toBeVisible();
       await expect(page.getByTestId('orgLogo')).toHaveAttribute('src', org.logo_url!);
@@ -41,13 +42,35 @@ test.describe('per-org theming', () => {
       expect(await rootVar(page, '--primary')).toBe(THEMES[org.theme as keyof typeof THEMES].primary);
     }
 
-    expect(await rootVar(reapBenefit, '--primary')).not.toBe(await rootVar(sunshine, '--primary'));
+    expect(await rootVar(darkOrg, '--primary')).not.toBe(await rootVar(lightOrg, '--primary'));
+  });
+
+  // Whatever an org uploads — landscape wordmark, square mark, tall crest — the frame is the
+  // same circle, so two orgs' login cards stay visually consistent.
+  test('the logo renders as a circle whatever its aspect ratio', async ({ context }) => {
+    const wide = await context.newPage();
+    await serveTheme(wide, DARK_ACCENT_ORG);
+    await wide.route('https://cdn.example.org/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="80"><rect width="600" height="80" fill="#7b1fa2"/></svg>',
+      })
+    );
+    await wide.goto('/login');
+
+    const { width, height, radius } = await expectCircularLogo(wide);
+
+    expect(Math.round(width)).toBe(Math.round(height));
+    expect(radius).toBeGreaterThanOrEqual(width / 2);
+    // Contained, not cropped — a 600x80 wordmark must not have its sides cut off.
+    await expect(wide.getByTestId('orgLogo')).toHaveCSS('object-fit', 'contain');
   });
 
   // Amber is deliberately light and Violet deliberately dark, so this covers both directions:
   // dark text on a pale button, and light text on a saturated one.
   test('button text stays legible on both a light and a dark theme', async ({ context }) => {
-    for (const org of [SUNSHINE_TRUST, REAP_BENEFIT]) {
+    for (const org of [LIGHT_ACCENT_ORG, DARK_ACCENT_ORG]) {
       const page = await context.newPage();
       await serveTheme(page, org);
       await page.goto('/login');
@@ -59,7 +82,7 @@ test.describe('per-org theming', () => {
 
   test('there is no flash of the default palette before the accent lands', async ({ context }) => {
     const prompt = await context.newPage();
-    await serveTheme(prompt, SUNSHINE_TRUST);
+    await serveTheme(prompt, LIGHT_ACCENT_ORG);
     await prompt.goto('/login');
     const settled = await rootVar(prompt, '--primary');
     expect(settled).not.toBe(UNTHEMED_PRIMARY);
@@ -73,7 +96,7 @@ test.describe('per-org theming', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ data: SUNSHINE_TRUST }),
+        body: JSON.stringify({ data: LIGHT_ACCENT_ORG }),
       });
     });
 
