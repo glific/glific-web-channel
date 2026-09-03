@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { getTheme } from '@/services/theme';
+import { getBranding } from '@/services/branding';
 
 interface LogoProps {
   /** Diameter in pixels. Also set as width/height so the circle reserves its space. */
@@ -14,7 +14,7 @@ interface LogoProps {
 // `object-cover` because NGO logos are usually landscape: covering would crop the sides off a
 // wordmark. The intrinsic width/height stop the card reflowing when the image lands.
 export const Logo = ({ size, className }: LogoProps) => {
-  const { logo_url: logoUrl, display_name: displayName } = getTheme();
+  const { logo_url: logoUrl, display_name: displayName } = getBranding();
 
   if (!logoUrl) return null;
 

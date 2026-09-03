@@ -4,13 +4,13 @@ import { THEMES } from '../src/services/themes';
 import {
   DARK_ACCENT_ORG,
   LIGHT_ACCENT_ORG,
-  THEME_ROUTE,
+  BRANDING_ROUTE,
   buttonContrast,
   expectCircularLogo,
   rootVar,
-  serveTheme,
-  serveThemeNotFound,
-} from './support/theme';
+  serveBranding,
+  serveBrandingNotFound,
+} from './support/branding';
 
 // WCAG AA for normal-size text. Button labels are normal-size.
 const AA_NORMAL_TEXT = 4.5;
@@ -21,15 +21,15 @@ const AA_NORMAL_TEXT = 4.5;
 const UNTHEMED_PRIMARY = 'oklch(20.5% 0 0)';
 
 test.describe('per-org theming', () => {
-  // One browser context, one deployment, two tabs — each routed to a different org's /theme.
+  // One browser context, one deployment, two tabs — each routed to a different org's /branding.
   // That is the production arrangement: the bundle is identical and only the response differs.
   test('two orgs render their own branding from one build', async ({ context }) => {
     const darkOrg = await context.newPage();
-    await serveTheme(darkOrg, DARK_ACCENT_ORG);
+    await serveBranding(darkOrg, DARK_ACCENT_ORG);
     await darkOrg.goto('/login');
 
     const lightOrg = await context.newPage();
-    await serveTheme(lightOrg, LIGHT_ACCENT_ORG);
+    await serveBranding(lightOrg, LIGHT_ACCENT_ORG);
     await lightOrg.goto('/login');
 
     for (const [page, org] of [
@@ -49,13 +49,13 @@ test.describe('per-org theming', () => {
   // same circle, so two orgs' login cards stay visually consistent.
   test('the logo renders as a circle whatever its aspect ratio', async ({ context }) => {
     const wide = await context.newPage();
-    await serveTheme(wide, DARK_ACCENT_ORG);
+    await serveBranding(wide, DARK_ACCENT_ORG);
     await wide.route('https://cdn.example.org/**', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'image/svg+xml',
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="80"><rect width="600" height="80" fill="#7b1fa2"/></svg>',
-      })
+      }),
     );
     await wide.goto('/login');
 
@@ -72,7 +72,7 @@ test.describe('per-org theming', () => {
   test('button text stays legible on both a light and a dark theme', async ({ context }) => {
     for (const org of [LIGHT_ACCENT_ORG, DARK_ACCENT_ORG]) {
       const page = await context.newPage();
-      await serveTheme(page, org);
+      await serveBranding(page, org);
       await page.goto('/login');
       await expect(page.getByTestId('phoneSubmit')).toBeVisible();
 
@@ -82,16 +82,16 @@ test.describe('per-org theming', () => {
 
   test('there is no flash of the default palette before the accent lands', async ({ context }) => {
     const prompt = await context.newPage();
-    await serveTheme(prompt, LIGHT_ACCENT_ORG);
+    await serveBranding(prompt, LIGHT_ACCENT_ORG);
     await prompt.goto('/login');
     const settled = await rootVar(prompt, '--primary');
     expect(settled).not.toBe(UNTHEMED_PRIMARY);
 
-    // Delay /theme well past the point the app would otherwise have painted. Because first
+    // Delay /branding well past the point the app would otherwise have painted. Because first
     // paint is held behind the fetch, the accent must already be final the moment anything is
     // on screen — not merely arrive shortly afterwards.
     const slow = await context.newPage();
-    await slow.route(THEME_ROUTE, async (route) => {
+    await slow.route(BRANDING_ROUTE, async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 700));
       await route.fulfill({
         status: 200,
@@ -107,7 +107,7 @@ test.describe('per-org theming', () => {
   });
 
   test('falls back to the default theme when the org has no web channel', async ({ page }) => {
-    await serveThemeNotFound(page);
+    await serveBrandingNotFound(page);
 
     await page.goto('/login');
 

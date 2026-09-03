@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 
 import { getWebChannelToken } from '@/services/webChannelAuth';
+import { WebChannelDisabledBanner } from '@/components/branding/WebChannelDisabledBanner';
 import { Login } from '@/routes/Login';
 import { Chat } from '@/routes/Chat';
 
@@ -19,25 +20,28 @@ const RedirectIfAuthed = ({ children }: { children: ReactElement }) =>
 // Public web-channel end-user app. The whole app IS the web channel (dedicated origin,
 // e.g. web.<org>.glific.com), so routes live at the root — no "/web" prefix needed.
 export const App = () => (
-  <Routes>
-    <Route
-      path="/login"
-      element={
-        <RedirectIfAuthed>
-          <Login />
-        </RedirectIfAuthed>
-      }
-    />
-    <Route
-      path="/chat"
-      element={
-        <RequireAuth>
-          <Chat />
-        </RequireAuth>
-      }
-    />
-    <Route path="*" element={<Navigate to="/chat" replace />} />
-  </Routes>
+  <>
+    <WebChannelDisabledBanner />
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <RedirectIfAuthed>
+            <Login />
+          </RedirectIfAuthed>
+        }
+      />
+      <Route
+        path="/chat"
+        element={
+          <RequireAuth>
+            <Chat />
+          </RequireAuth>
+        }
+      />
+      <Route path="*" element={<Navigate to="/chat" replace />} />
+    </Routes>
+  </>
 );
 
 export default App;

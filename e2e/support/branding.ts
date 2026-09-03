@@ -1,12 +1,12 @@
 import type { Page } from '@playwright/test';
 
-export interface OrgTheme {
+export interface OrgBranding {
   theme: string;
   logo_url: string | null;
   display_name: string;
 }
 
-export const THEME_ROUTE = '**/api/v1/web_channel/theme';
+export const BRANDING_ROUTE = '**/api/v1/web_channel/branding';
 
 /**
  * Stand in for one org's backend.
@@ -15,19 +15,25 @@ export const THEME_ROUTE = '**/api/v1/web_channel/theme';
  * identifier — so from the browser's side "which org am I" *is* the /theme response. Serving
  * two different ones to the same build is exactly the two-org case, without two backends.
  */
-export const serveTheme = (page: Page, theme: OrgTheme) =>
-  page.route(THEME_ROUTE, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: theme }) })
+export const serveBranding = (page: Page, branding: OrgBranding) =>
+  page.route(BRANDING_ROUTE, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: branding }),
+    }),
   );
 
 /** An org without the `web_channel_enabled` feature flag. */
-export const serveThemeNotFound = (page: Page) =>
-  page.route(THEME_ROUTE, (route) =>
+export const serveBrandingNotFound = (page: Page) =>
+  page.route(BRANDING_ROUTE, (route) =>
     route.fulfill({
       status: 404,
       contentType: 'application/json',
-      body: JSON.stringify({ error: { status: 404, message: 'Web channel is not enabled.' } }),
-    })
+      body: JSON.stringify({
+        error: { status: 404, message: 'Web channel is not enabled.' },
+      }),
+    }),
   );
 
 /** Read a custom property off :root as the browser resolved it. */
@@ -36,13 +42,13 @@ export const rootVar = (page: Page, name: string) =>
 
 // Two fictional orgs, named after what they exercise rather than after any real NGO. Violet is
 // a dark accent and Amber a light one, so between them they cover both foreground cases.
-export const DARK_ACCENT_ORG: OrgTheme = {
+export const DARK_ACCENT_ORG: OrgBranding = {
   theme: 'violet',
   logo_url: 'https://cdn.example.org/violet.svg',
   display_name: 'Violet NGO',
 };
 
-export const LIGHT_ACCENT_ORG: OrgTheme = {
+export const LIGHT_ACCENT_ORG: OrgBranding = {
   theme: 'amber',
   logo_url: 'https://cdn.example.org/amber.svg',
   display_name: 'Amber NGO',

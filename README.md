@@ -55,27 +55,27 @@ VITE_GLIFIC_API_URL=https://api.<org>.glific.com/api
 VITE_WEB_SOCKET=wss://api.<org>.glific.com/web_socket
 ```
 
-## Theming
+## Branding
 
 Branding is **per organisation and fetched at runtime** — one build serves every NGO. At boot
-the app calls `GET /api/v1/web_channel/theme`; the backend resolves the organisation from the
+the app calls `GET /api/v1/web_channel/branding`; the backend resolves the organisation from the
 request `Host`, so the client sends no organisation identifier. Admins set the values from
 Glific's Settings page under **Web Channel**, and a change takes effect on reload with no
 redeploy.
 
 | Value | Where it lands |
 |---|---|
-| Accent colour (`#rrggbb`) | `--primary`, converted to `oklch()` |
-| — | `--primary-foreground`, **computed** from the accent |
+| Theme (a named palette) | `--primary` and its matched `--primary-foreground` |
 | Logo URL (`https` only) | Login card and chat header |
 | Display name | Login card and `document.title` |
 
-Three properties worth knowing before changing `src/services/theme.ts`:
+Three properties worth knowing before changing `src/services/branding.ts`:
 
 - **First paint is held** behind the fetch (`src/main.tsx`), so there is no flash of the default
   palette. A failed or 404'd fetch falls back to `index.css` and still renders.
-- **The foreground is computed, never supplied.** An organisation that picked its own foreground
-  could make its button text vanish; contrast is an accessibility obligation, not a preference.
+- **The foreground ships with the palette, never supplied by the org.** An organisation that
+  picked its own foreground could make its button text vanish; contrast is an accessibility
+  obligation, not a preference. `themes.test.ts` asserts every pair clears WCAG AA.
 - **Override the raw custom properties** (`--primary`), not the `--color-*` aliases — those are
   compiled through Tailwind's `@theme inline` and cannot be set at runtime.
 
@@ -95,6 +95,10 @@ that changes user-visible behaviour is not done until `e2e/` covers it.
 Journeys are grouped one file per feature area, with shared fixtures in `e2e/support/`. Backend
 responses are stubbed with `page.route`, which is what lets a single build be exercised as two
 different organisations without standing up two backends.
+
+Journeys run on **Pixel 7, iPhone 14, iPhone SE and Desktop Chrome** — beneficiaries reach this
+on a phone, often a shared or borrowed one, so mobile is the primary target rather than an
+afterthought.
 
 CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → `vitest run` → production
 build → `playwright test` on every push and pull request.
@@ -128,7 +132,8 @@ src/
   services/
     webChannelSocket.ts      # phoenix socket: join, send, load-more, rename
     webChannelAuth.ts        # OTP request/verify + localStorage session
-    theme.ts                 # per-org branding: fetch, hex->oklch, computed foreground
+    branding.ts              # per-org branding: fetch, apply, module store
+    themes.ts                # the named colour palettes
   routes/
     Login.tsx                # phone -> OTP (react-hook-form + zod)
     Chat.tsx                 # conversation: realtime, optimistic send, reverse-infinite scroll
@@ -141,7 +146,7 @@ src/
     whatsapp.tsx             # safe WhatsApp-markup -> JSX + time formatting
     utils.ts                 # shadcn cn()
   App.tsx                    # routes (/login, /chat)
-  main.tsx                   # resolves the theme, then mounts BrowserRouter
+  main.tsx                   # resolves branding, then mounts BrowserRouter
 e2e/                         # Playwright journeys (see "End-to-end tests")
 ```
 

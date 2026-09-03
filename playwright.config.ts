@@ -18,7 +18,15 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Beneficiaries reach this on a phone — often a shared or borrowed one — so mobile is the
+  // primary target, not an afterthought. Chrome on Android and Safari on iOS together cover
+  // the large majority of mobile browser use; desktop Chrome stays for staff-side debugging.
+  projects: [
+    { name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
+    { name: 'mobile-safari', use: { ...devices['iPhone 14'] } },
+    { name: 'mobile-safari-small', use: { ...devices['iPhone SE'] } },
+    { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] } },
+  ],
 
   // The production build, not the dev server — theming runs before first paint and the dev
   // server's module graph is not what ships.
