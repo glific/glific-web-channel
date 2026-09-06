@@ -157,6 +157,11 @@ export const Login = () => {
                 </p>
               )}
             </div>
+            {/* Shown before the number can be submitted, not on the OTP step: signing in is what
+                records consent for this channel, so the notice has to precede it. */}
+            <p className="text-xs text-muted-foreground" data-testid="consentNotice">
+              By continuing, you agree to receive messages from {orgName} on this chat.
+            </p>
             <Button type="submit" data-testid="phoneSubmit" disabled={loading}>
               {loading ? 'Sending…' : 'Send OTP'}
             </Button>
