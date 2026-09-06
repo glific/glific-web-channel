@@ -42,7 +42,7 @@ export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;
 export const WEB_CHANNEL_VERIFY_OTP = `${API_BASE}/v1/web_channel/verify-otp`;
 export const WEB_CHANNEL_RENEW_TOKEN = `${API_BASE}/v1/web_channel/renew-token`;
-export const WEB_CHANNEL_UPLOAD = `${API_BASE}/v1/web_channel/upload`;
+export const WEB_CHANNEL_UPLOAD = `${API_BASE}/v1/web_channel/upload-url`;
 
 // Must not undercut the backend's per-IP throttle (`:web_channel_otp_rate_limit`, 1 per 30s), or
 // the countdown just walks the user into a 429.
