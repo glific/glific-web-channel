@@ -1,33 +1,60 @@
 // Backend endpoints for the public web-channel end-user app.
 //
-// One build serves every NGO, so nothing org-specific may be inlined at build time — Vite
-// substitutes VITE_* into the bundle, and a baked-in host would silently pin this build to one
-// organisation. The backend resolves the org from the request Host, so the API host is derived
-// from where the page is being served instead.
+// One build serves every organisation — theming is applied at runtime, not baked in — so the
+// backend origin cannot be a build-time constant either. web.tap.glific.com and
+// web.staging.glific.com are the same bundle and must reach different APIs.
+//
+// The rule, in order:
+//
+//   1. If VITE_GLIFIC_API_URL / VITE_WEB_SOCKET are set, use them. Explicit configuration always
+//      wins.
+//   2. Otherwise derive the backend from the hostname, swapping the leading `web` label for `api`:
+//        web.staging.glific.com  ->  api.staging.glific.com
+//   3. Otherwise fall back to same-origin relative paths.
+//
+// Step 3 exists for local dev, where the Vite proxy (vite.config.ts) forwards /api and
+// /web_socket to the backend, so there is no cross-origin request to make.
+//
+// Vercel preview deployments are the case that needs step 1. A hostname like
+// glific-web-channel-git-main-glific.vercel.app carries no organisation information, so nothing
+// can be derived from it and the environment variables have to be set on the deployment.
+
+const API_PATH = '/api';
+const SOCKET_PATH = '/web_socket';
 
 /**
- * Map the page's hostname onto the backend serving that org.
+ * The backend origin implied by a web-channel hostname, or null when the hostname does not
+ * follow the `web.<...>` convention and therefore says nothing about which backend to use.
  *
- *   web.<shortcode>.glific.com  ->  https://api.<shortcode>.glific.com/api
- *
- * The `api.` prefix matters: `<shortcode>.glific.com` serves the staff console, a static site
- * that answers any path with index.html and no CORS headers — so pointing here without it looks
- * like a CORS failure when the request is simply going to the wrong server. SubdomainPlug strips
- * `api.` when resolving the org, so both hosts resolve to the same organisation.
- *
- * Anything else — localhost, glific.test, a preview URL — falls back to a same-origin relative
- * path, which the Vite dev proxy forwards to the local backend.
+ * Exported for tests: the constants below are resolved once at module load, so this is the only
+ * part that can be exercised against more than one hostname.
  */
-export const deriveApiBase = (hostname: string): string =>
-  hostname.startsWith('web.') ? `https://api.${hostname.slice('web.'.length)}/api` : '/api';
+export const deriveBackendOrigin = (hostname: string, protocol: string): string | null => {
+  const labels = hostname.split('.');
 
-// The env var stays as an escape hatch for previews pointed at a fixed backend. It must never
-// hold an org-specific host in production: that is precisely what breaks the one-build model.
-const API_BASE: string = import.meta.env.VITE_GLIFIC_API_URL || deriveApiBase(window.location.hostname);
+  // The first label must be exactly "web" — "webhooks.glific.com" is not a web-channel host.
+  // At least three labels, so a bare "web.test" cannot resolve to a nonexistent "api.test".
+  if (labels[0] !== 'web' || labels.length < 3) return null;
+
+  return `${protocol}//${['api', ...labels.slice(1)].join('.')}`;
+};
+
+const derivedOrigin =
+  typeof window === 'undefined'
+    ? null
+    : deriveBackendOrigin(window.location.hostname, window.location.protocol);
+
+// https -> wss, http -> ws, so a local http deployment is not forced onto a TLS socket.
+const derivedSocketOrigin = derivedOrigin?.replace(/^http/, 'ws') ?? null;
+
+const API_BASE: string =
+  import.meta.env.VITE_GLIFIC_API_URL || (derivedOrigin ? `${derivedOrigin}${API_PATH}` : API_PATH);
 
 // The phoenix JS client accepts a path-only endpoint and derives ws(s)://host from
-// window.location, so the relative default proxies transparently in dev.
-export const WEB_SOCKET: string = import.meta.env.VITE_WEB_SOCKET || '/web_socket';
+// window.location — which is correct only same-origin, so a derived backend needs the full URL.
+export const WEB_SOCKET: string =
+  import.meta.env.VITE_WEB_SOCKET ||
+  (derivedSocketOrigin ? `${derivedSocketOrigin}${SOCKET_PATH}` : SOCKET_PATH);
 
 // Per-org branding: theme, logo and display name. Public — it renders before login.
 export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
