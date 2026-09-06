@@ -32,6 +32,12 @@ export const WEB_SOCKET: string = import.meta.env.VITE_WEB_SOCKET || '/web_socke
 // Per-org branding: theme, logo and display name. Public — it renders before login.
 export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
 
-// Public OTP auth endpoints (prototype: server does not actually send an SMS).
+// Public OTP auth endpoints. The one-time code is delivered over WhatsApp, not SMS.
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;
 export const WEB_CHANNEL_VERIFY_OTP = `${API_BASE}/v1/web_channel/verify-otp`;
+
+// How long the OTP resend button stays disabled, in seconds. Source of truth is the
+// backend's per-IP throttle — `config :glific, :web_channel_otp_rate_limit, scale_ms: 30_000,
+// count: 1` in the Glific repo's config/config.exs. Keep the two in step: a shorter countdown
+// here just walks the user into a 429.
+export const WEB_CHANNEL_OTP_RESEND_SECONDS = 30;

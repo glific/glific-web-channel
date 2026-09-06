@@ -49,8 +49,40 @@ export const clearWebChannelSession = (): void => {
   localStorage.removeItem(WEB_CHANNEL_SESSION_KEY);
 };
 
-// request an OTP for the given phone (prototype: server does not actually send an SMS)
+// request an OTP for the given phone; the code is delivered over WhatsApp.
+// Always resolves 200 when the org is enabled, whether or not the number is a known
+// contact and whether or not delivery succeeded — that neutrality is deliberate, it stops
+// the endpoint being used to enumerate an NGO's beneficiaries.
 export const requestOtp = (phone: string) => axios.post(WEB_CHANNEL_REQUEST_OTP, { phone });
 
 // verify an OTP; resolves with { token, contact_id, name, phone } on success, rejects with 401 on failure
 export const verifyOtp = (phone: string, otp: string) => axios.post(WEB_CHANNEL_VERIFY_OTP, { phone, otp });
+
+// Shape of the error body both web-channel auth endpoints return: { error: { status, message } }.
+interface WebChannelErrorResponse {
+  error?: { status?: number; message?: string };
+}
+
+const GENERIC_ERROR = 'Something went wrong. Please try again.';
+
+// Turn an axios rejection from either auth endpoint into copy we can show a beneficiary,
+// so the routes hold no status codes. 422 and 429 carry a server message that is already
+// user-facing (the phone-format hint, and the "try again in N seconds" wait); the rest are
+// deliberately vague, because 401 must read the same for a wrong, expired, never-issued or
+// attempt-blocked code.
+export const webChannelErrorMessage = (error: unknown): string => {
+  const response = (error as { response?: { status?: number; data?: WebChannelErrorResponse } })?.response;
+  const serverMessage = response?.data?.error?.message;
+
+  switch (response?.status) {
+    case 422:
+    case 429:
+      return serverMessage || GENERIC_ERROR;
+    case 404:
+      return 'Messaging is not available for this organisation yet.';
+    case 401:
+      return 'That code is not right. Check it and try again.';
+    default:
+      return GENERIC_ERROR;
+  }
+};

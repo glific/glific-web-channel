@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import axios from 'axios';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
+import { WEB_CHANNEL_OTP_RESEND_SECONDS, WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
 import { Login } from './Login';
 
 vi.mock('axios');
@@ -29,6 +29,15 @@ const renderLogin = () =>
     </MemoryRouter>,
   );
 
+// walk the phone step so the assertions below start on the OTP step
+const goToOtpStep = async (container: HTMLElement, phoneNumber = '919999999999') => {
+  await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+  const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+  fireEvent.change(phone, { target: { value: phoneNumber } });
+  fireEvent.click(screen.getByTestId('phoneSubmit'));
+  await waitFor(() => expect(screen.getByText('Enter the OTP')).toBeInTheDocument());
+};
+
 describe('<Login />', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,6 +55,10 @@ describe('<Login />', () => {
       }
       return Promise.resolve({ data: {} });
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders the phone step with the NGO logo, name and "powered by Glific" branding', async () => {
@@ -81,15 +94,12 @@ describe('<Login />', () => {
     // Step 2: OTP field appears
     await waitFor(() => expect(screen.getByText('Enter the OTP')).toBeInTheDocument());
     const otp = container.querySelector('input') as HTMLInputElement;
-    fireEvent.change(otp, { target: { value: '9999' } });
+    fireEvent.change(otp, { target: { value: '123456' } });
     fireEvent.click(screen.getByTestId('otpSubmit'));
 
     // verify-otp called and navigation to chat happened
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_VERIFY_OTP, {
-        phone: '919999999999',
-        otp: '9999',
-      }),
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_VERIFY_OTP, { phone: '919999999999', otp: '123456' })
     );
     await waitFor(() => expect(screen.getByText('Chat Window')).toBeInTheDocument());
 
@@ -102,7 +112,7 @@ describe('<Login />', () => {
     });
   });
 
-  it('shows an inline "Invalid OTP" error on a 401', async () => {
+  it('shows the wrong-code copy on a 401 from verify-otp', async () => {
     const { container } = renderLogin();
     await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
 
@@ -116,9 +126,233 @@ describe('<Login />', () => {
     mockedAxios.post.mockImplementationOnce(() => Promise.reject({ response: { status: 401 } }));
 
     const otp = container.querySelector('input') as HTMLInputElement;
-    fireEvent.change(otp, { target: { value: '0000' } });
+    fireEvent.change(otp, { target: { value: '000000' } });
     fireEvent.click(screen.getByTestId('otpSubmit'));
 
-    await waitFor(() => expect(screen.getByTestId('otpError')).toHaveTextContent('Invalid OTP'));
+    await waitFor(() =>
+      expect(screen.getByTestId('otpError')).toHaveTextContent('That code is not right. Check it and try again.')
+    );
+  });
+
+  it('blocks the request-otp call entirely when the phone fails the format check', async () => {
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '12345' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('phoneError')).toHaveTextContent(
+        'Enter your number with country code, for example 919820198765.'
+      )
+    );
+    // only the branding call went out; request-otp was never attempted
+    expect(mockedAxios.post).not.toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, expect.anything());
+    expect(screen.queryByText('Enter the OTP')).not.toBeInTheDocument();
+  });
+
+  it('strips spaces and brackets before sending the phone to the server', async () => {
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '91 98201-98765' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() =>
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '919820198765' })
+    );
+  });
+
+  it('renders the server message verbatim when request-otp is throttled with a 429', async () => {
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    mockedAxios.post.mockImplementationOnce(() =>
+      Promise.reject({
+        response: {
+          status: 429,
+          data: { error: { status: 429, message: 'An OTP was just sent. Please try again in 30 seconds.' } },
+        },
+      })
+    );
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '919999999999' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('phoneRequestError')).toHaveTextContent(
+        'An OTP was just sent. Please try again in 30 seconds.'
+      )
+    );
+    expect(screen.queryByText('Enter the OTP')).not.toBeInTheDocument();
+  });
+
+  it('renders the not-enabled copy when the org has the web channel turned off (404)', async () => {
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    mockedAxios.post.mockImplementationOnce(() =>
+      Promise.reject({
+        response: {
+          status: 404,
+          data: { error: { status: 404, message: 'Web channel is not enabled for this organization' } },
+        },
+      })
+    );
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '919999999999' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('phoneRequestError')).toHaveTextContent(
+        'Messaging is not available for this organisation yet.'
+      )
+    );
+  });
+
+  it('renders the server phone-format message on a 422 from request-otp', async () => {
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    mockedAxios.post.mockImplementationOnce(() =>
+      Promise.reject({
+        response: {
+          status: 422,
+          data: {
+            error: {
+              status: 422,
+              message: 'Please enter the phone number with country code, without the + symbol.',
+            },
+          },
+        },
+      })
+    );
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    // passes the client pre-check, rejected by ExPhoneNumber on the server
+    fireEvent.change(phone, { target: { value: '911111111111' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('phoneRequestError')).toHaveTextContent(
+        'Please enter the phone number with country code, without the + symbol.'
+      )
+    );
+  });
+
+  it('blocks the verify-otp call when the code is not 4-6 digits', async () => {
+    const { container } = renderLogin();
+    await goToOtpStep(container);
+
+    const otp = container.querySelector('input') as HTMLInputElement;
+    fireEvent.change(otp, { target: { value: 'abc' } });
+    fireEvent.click(screen.getByTestId('otpSubmit'));
+
+    await waitFor(() => expect(screen.getByText('Enter the 6-digit code we sent you.')).toBeInTheDocument());
+    expect(mockedAxios.post).not.toHaveBeenCalledWith(WEB_CHANNEL_VERIFY_OTP, expect.anything());
+  });
+
+  it('explains that the code arrives on WhatsApp instead of the prototype hint', async () => {
+    const { container } = renderLogin();
+    // a number with no 9999 in it, so the echoed phone cannot mask the assertion below
+    await goToOtpStep(container, '919820198765');
+
+    expect(screen.getByText(/Didn't get a code\?/)).toBeInTheDocument();
+    expect(screen.getByText(/arrives as a WhatsApp message/)).toBeInTheDocument();
+    // the "9999" prototype bypass and its visible hint are both gone
+    expect(container.textContent).not.toContain('9999');
+    expect(container.textContent).not.toContain('Prototype');
+  });
+
+  it('disables the resend button while the countdown runs and re-enables it after', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { container } = renderLogin();
+    await goToOtpStep(container);
+
+    const resend = screen.getByTestId('otpResend');
+    expect(resend).toBeDisabled();
+    expect(resend).toHaveTextContent(`Resend in ${WEB_CHANNEL_OTP_RESEND_SECONDS}s`);
+
+    // part way through: still counting
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByTestId('otpResend')).toBeDisabled();
+    expect(screen.getByTestId('otpResend')).toHaveTextContent(
+      `Resend in ${WEB_CHANNEL_OTP_RESEND_SECONDS - 1}s`
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(WEB_CHANNEL_OTP_RESEND_SECONDS * 1000);
+    });
+    await waitFor(() => expect(screen.getByTestId('otpResend')).toBeEnabled());
+    expect(screen.getByTestId('otpResend')).toHaveTextContent('Resend code');
+  });
+
+  it('re-requests the code and restarts the countdown when resend is clicked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { container } = renderLogin();
+    await goToOtpStep(container);
+
+    await act(async () => {
+      vi.advanceTimersByTime(WEB_CHANNEL_OTP_RESEND_SECONDS * 1000);
+    });
+    await waitFor(() => expect(screen.getByTestId('otpResend')).toBeEnabled());
+
+    mockedAxios.post.mockClear();
+    fireEvent.click(screen.getByTestId('otpResend'));
+
+    await waitFor(() =>
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '919999999999' })
+    );
+    await waitFor(() => expect(screen.getByTestId('otpNotice')).toBeInTheDocument());
+    expect(screen.getByTestId('otpResend')).toBeDisabled();
+    expect(screen.getByTestId('otpResend')).toHaveTextContent(`Resend in ${WEB_CHANNEL_OTP_RESEND_SECONDS}s`);
+  });
+
+  it('surfaces the throttle message when a resend is rejected with a 429', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { container } = renderLogin();
+    await goToOtpStep(container);
+
+    await act(async () => {
+      vi.advanceTimersByTime(WEB_CHANNEL_OTP_RESEND_SECONDS * 1000);
+    });
+    await waitFor(() => expect(screen.getByTestId('otpResend')).toBeEnabled());
+
+    mockedAxios.post.mockImplementationOnce(() =>
+      Promise.reject({
+        response: {
+          status: 429,
+          data: { error: { status: 429, message: 'An OTP was just sent. Please try again in 30 seconds.' } },
+        },
+      })
+    );
+    fireEvent.click(screen.getByTestId('otpResend'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('otpError')).toHaveTextContent(
+        'An OTP was just sent. Please try again in 30 seconds.'
+      )
+    );
+  });
+
+  it('falls back to generic copy when verify-otp fails with no response (network error)', async () => {
+    const { container } = renderLogin();
+    await goToOtpStep(container);
+
+    mockedAxios.post.mockImplementationOnce(() => Promise.reject(new Error('Network Error')));
+
+    const otp = container.querySelector('input') as HTMLInputElement;
+    fireEvent.change(otp, { target: { value: '123456' } });
+    fireEvent.click(screen.getByTestId('otpSubmit'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('otpError')).toHaveTextContent('Something went wrong. Please try again.')
+    );
   });
 });
