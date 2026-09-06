@@ -20,9 +20,8 @@ import {
   webChannelErrorStatus,
 } from '@/services/webChannelAuth';
 
-// Courtesy pre-check only: it saves a round trip on an obvious typo. The server stays the
-// authority on what a valid number is (it runs ExPhoneNumber), so a number that passes here
-// can still come back 422.
+// Courtesy pre-check only — the server runs ExPhoneNumber and stays the authority, so a number
+// that passes here can still come back 422.
 const phoneSchema = z.object({
   phone: z
     .string()
@@ -35,8 +34,7 @@ const phoneSchema = z.object({
     ),
 });
 const otpSchema = z.object({
-  // PasswordlessAuth mints a 6-digit code and Glific does not override the length, so a
-  // shorter entry can only ever come back 401 — catch it here instead of spending a round trip.
+  // PasswordlessAuth mints 6 digits, so a shorter entry can only ever come back 401.
   otp: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code we sent you.'),
 });
 
@@ -78,11 +76,8 @@ export const Login = () => {
     requestOtp(values.phone)
       .then(() => goToOtpStep(values.phone))
       .catch((requestError) => {
-        // A 429 here is not a failure to send — it means a code was ALREADY sent to this number
-        // and the user asked again inside the throttle window. Keeping them on the phone step
-        // leaves a live code sitting in their WhatsApp with nowhere to type it, so advance
-        // exactly as a 200 does and show the server's wait as a notice: it is information about
-        // a code they have, not an error about one they don't.
+        // A 429 means a code was ALREADY sent, not that sending failed. Holding the user here
+        // would leave a live code in their WhatsApp with nowhere to type it.
         if (webChannelErrorStatus(requestError) === 429) {
           goToOtpStep(values.phone);
           setNotice(webChannelErrorMessage(requestError));
@@ -107,14 +102,9 @@ export const Login = () => {
       .finally(() => setResending(false));
   };
 
-  // The "didn't get a code" copy tells the user to check the number they entered, which is only
-  // useful if they can act on it. Returning to the phone step pre-fills what they typed so a
-  // mistyped digit is a correction rather than a retype, and drops the code they may have typed
-  // for the number they are abandoning.
-  //
-  // setResendIn(0) is only stopping a timer that is no longer on screen — the countdown the user
-  // next sees is set by onPhoneSubmit when they request a code for the corrected number, not
-  // here. It is cleanup, not the thing that makes the countdown restart.
+  // Pre-fills the number so a mistyped digit is a correction rather than a retype. setResendIn(0)
+  // only stops a timer that is no longer on screen; onPhoneSubmit sets the countdown the user
+  // next sees.
   const onChangeNumber = () => {
     setError('');
     setNotice('');
@@ -199,9 +189,8 @@ export const Login = () => {
               {loading ? 'Verifying…' : 'Verify'}
             </Button>
 
-            {/* The request endpoint answers the same way for a number it has never seen as for one
-                it has, so nothing tells the user their number was wrong. This block is the only
-                recourse they get: an explanation, and a way to try again. */}
+            {/* request-otp answers identically for a number it has never seen, so nothing tells
+                the user they mistyped. This block is their only recourse. */}
             <div className="flex flex-col items-center gap-1.5 text-center">
               <p className="text-xs text-muted-foreground">
                 Didn't get a code? It arrives as a WhatsApp message and can take a moment. Check that you

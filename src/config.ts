@@ -1,39 +1,21 @@
-// Backend endpoints for the public web-channel end-user app.
-//
-// One build serves every organisation — theming is applied at runtime, not baked in — so the
-// backend origin cannot be a build-time constant either. web.tap.glific.com and
-// web.staging.glific.com are the same bundle and must reach different APIs.
-//
-// The rule, in order:
-//
-//   1. If VITE_GLIFIC_API_URL / VITE_WEB_SOCKET are set, use them. Explicit configuration always
-//      wins.
-//   2. Otherwise derive the backend from the hostname, swapping the leading `web` label for `api`:
-//        web.staging.glific.com  ->  api.staging.glific.com
-//   3. Otherwise fall back to same-origin relative paths.
-//
-// Step 3 exists for local dev, where the Vite proxy (vite.config.ts) forwards /api and
-// /web_socket to the backend, so there is no cross-origin request to make.
-//
-// Vercel preview deployments are the case that needs step 1. A hostname like
-// glific-web-channel-git-main-glific.vercel.app carries no organisation information, so nothing
-// can be derived from it and the environment variables have to be set on the deployment.
+// One build serves every organisation, so the backend origin cannot be a build-time constant:
+// web.tap.glific.com and web.staging.glific.com are the same bundle and must reach different APIs.
+// Vercel previews carry no organisation in their hostname and so must set the env vars explicitly;
+// local dev falls through to relative paths that the Vite proxy forwards.
 
 const API_PATH = '/api';
 const SOCKET_PATH = '/web_socket';
 
 /**
- * The backend origin implied by a web-channel hostname, or null when the hostname does not
- * follow the `web.<...>` convention and therefore says nothing about which backend to use.
- *
- * Exported for tests: the constants below are resolved once at module load, so this is the only
- * part that can be exercised against more than one hostname.
+ * The backend origin implied by a web-channel hostname, or null when the hostname says nothing
+ * about which backend to use. Exported so tests can exercise more than one hostname; the constants
+ * below resolve once at module load.
  */
 export const deriveBackendOrigin = (hostname: string, protocol: string): string | null => {
   const labels = hostname.split('.');
 
-  // The first label must be exactly "web" — "webhooks.glific.com" is not a web-channel host.
-  // At least three labels, so a bare "web.test" cannot resolve to a nonexistent "api.test".
+  // Exactly "web", or webhooks.glific.com would resolve to api.glific.com. Three labels minimum,
+  // or a bare "web.test" would resolve to a nonexistent "api.test".
   if (labels[0] !== 'web' || labels.length < 3) return null;
 
   return `${protocol}//${['api', ...labels.slice(1)].join('.')}`;
@@ -44,42 +26,28 @@ const derivedOrigin =
     ? null
     : deriveBackendOrigin(window.location.hostname, window.location.protocol);
 
-// https -> wss, http -> ws, so a local http deployment is not forced onto a TLS socket.
 const derivedSocketOrigin = derivedOrigin?.replace(/^http/, 'ws') ?? null;
 
 const API_BASE: string =
   import.meta.env.VITE_GLIFIC_API_URL || (derivedOrigin ? `${derivedOrigin}${API_PATH}` : API_PATH);
 
-// The phoenix JS client accepts a path-only endpoint and derives ws(s)://host from
-// window.location — which is correct only same-origin, so a derived backend needs the full URL.
+// A path-only endpoint makes the phoenix client derive ws(s)://host from window.location, which is
+// only correct same-origin — so a derived backend needs the full URL.
 export const WEB_SOCKET: string =
   import.meta.env.VITE_WEB_SOCKET ||
   (derivedSocketOrigin ? `${derivedSocketOrigin}${SOCKET_PATH}` : SOCKET_PATH);
 
-// Per-org branding: theme, logo and display name. Public — it renders before login.
 export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
 
-// Public OTP auth endpoints. The one-time code is delivered over WhatsApp, not SMS.
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;
 export const WEB_CHANNEL_VERIFY_OTP = `${API_BASE}/v1/web_channel/verify-otp`;
-
-// Exchanges a still-valid token for a fresh one. It renews rather than re-authenticates, so it
-// only works while the current token is alive — an expired one comes back 401 and the user has
-// to go through the OTP flow again.
 export const WEB_CHANNEL_RENEW_TOKEN = `${API_BASE}/v1/web_channel/renew-token`;
 
-// How long the OTP resend button stays disabled, in seconds. Source of truth is the
-// backend's per-IP throttle — `config :glific, :web_channel_otp_rate_limit, scale_ms: 30_000,
-// count: 1` in the Glific repo's config/config.exs. Keep the two in step: a shorter countdown
-// here just walks the user into a 429.
+// Must not undercut the backend's per-IP throttle (`:web_channel_otp_rate_limit`, 1 per 30s), or
+// the countdown just walks the user into a 429.
 export const WEB_CHANNEL_OTP_RESEND_SECONDS = 30;
 
-// Silent-refresh tuning. The backend mints a one-hour token, so renewing with ten minutes left
-// gives a wide margin: a tab that is asleep for most of that window still has plenty of time to
-// renew when it wakes, and a refresh that fails transiently has ~20 retries before the token dies.
+// Ten minutes of a one-hour token: wide enough that a tab asleep through most of the window still
+// has time to renew on wake, and that a transient failure gets ~20 retries.
 export const WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS = 10 * 60;
-
-// How often the refresh check runs. Cheap (it reads localStorage and compares a number; the
-// network call only happens inside the threshold), and browsers throttle it heavily in a
-// background tab anyway — which is why the hook also checks on focus.
 export const WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS = 30_000;

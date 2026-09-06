@@ -7,17 +7,12 @@ import { useSessionRefresh } from '@/hooks/useSessionRefresh';
 import { Login } from '@/routes/Login';
 import { Chat } from '@/routes/Chat';
 
-// Route guards are COMPONENTS (not a value computed in App's body) so the token is read
-// at the moment <Routes> renders them for the current location. If we instead computed
-// `hasToken` once in App, App would not re-render on navigation (it doesn't consume the
-// location context), and the guard would use a stale value — trapping the user on /login
-// right after a successful OTP verify.
+// The guards are COMPONENTS so the token is read when <Routes> renders them. Computing it once in
+// App's body would leave it stale on navigation, trapping the user on /login after a successful
+// verify.
 //
-// "Is there a token?" is the wrong question — an expired one would send the user to /chat, where
-// the socket join then fails and they are left staring at a chat that never connects. Both guards
-// ask whether the session is still LIVE, and drop a dead one on the way past so the next reader
-// (this guard on the next render, Chat, the refresh hook) sees a plainly signed-out app rather
-// than a token that every one of them has to re-evaluate.
+// They ask whether the session is LIVE, not whether a token exists: an expired one would send the
+// user to /chat, where the socket join fails and they watch a chat that never connects.
 const hasLiveSession = (): boolean => {
   if (isSessionValid()) return true;
   if (getWebChannelToken()) clearWebChannelSession();
@@ -25,8 +20,7 @@ const hasLiveSession = (): boolean => {
 };
 
 const RequireAuth = ({ children }: { children: ReactElement }) => {
-  // Mounted here rather than in App so the refresh loop runs only for the authenticated part of
-  // the app — there is nothing to renew on the login screen.
+  // Here rather than in App: there is nothing to renew on the login screen.
   useSessionRefresh();
 
   return hasLiveSession() ? children : <Navigate to="/login" replace />;
@@ -35,8 +29,8 @@ const RequireAuth = ({ children }: { children: ReactElement }) => {
 const RedirectIfAuthed = ({ children }: { children: ReactElement }) =>
   hasLiveSession() ? <Navigate to="/chat" replace /> : children;
 
-// Public web-channel end-user app. The whole app IS the web channel (dedicated origin,
-// e.g. web.<org>.glific.com), so routes live at the root — no "/web" prefix needed.
+// The whole app IS the web channel (dedicated origin, e.g. web.<org>.glific.com), so routes live
+// at the root.
 export const App = () => (
   <>
     <WebChannelDisabledBanner />
