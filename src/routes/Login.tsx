@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { ArrowLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,6 +86,23 @@ export const Login = () => {
       .finally(() => setResending(false));
   };
 
+  // The "didn't get a code" copy tells the user to check the number they entered, which is only
+  // useful if they can act on it. Returning to the phone step pre-fills what they typed so a
+  // mistyped digit is a correction rather than a retype, and drops the code they may have typed
+  // for the number they are abandoning.
+  //
+  // setResendIn(0) is only stopping a timer that is no longer on screen — the countdown the user
+  // next sees is set by onPhoneSubmit when they request a code for the corrected number, not
+  // here. It is cleanup, not the thing that makes the countdown restart.
+  const onChangeNumber = () => {
+    setError('');
+    setNotice('');
+    setResendIn(0);
+    otpForm.reset({ otp: '' });
+    phoneForm.reset({ phone });
+    setStep('phone');
+  };
+
   const onOtpSubmit = (values: OtpValues) => {
     setError('');
     setNotice('');
@@ -143,6 +161,15 @@ export const Login = () => {
               <Label htmlFor="otp">Enter the OTP</Label>
               <Input id="otp" inputMode="numeric" placeholder="OTP" autoFocus {...otpForm.register('otp')} />
               <p className="text-xs text-muted-foreground">We sent a one-time code to {phone} on WhatsApp.</p>
+              <button
+                type="button"
+                data-testid="otpBack"
+                onClick={onChangeNumber}
+                className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                <ArrowLeft className="size-3" aria-hidden="true" />
+                Use a different number
+              </button>
               {otpForm.formState.errors.otp && (
                 <p className="text-xs text-destructive">{otpForm.formState.errors.otp.message}</p>
               )}

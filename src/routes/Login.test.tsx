@@ -341,6 +341,79 @@ describe('<Login />', () => {
     );
   });
 
+  it('returns to the phone step and pre-fills the number, so a typo is a correction', async () => {
+    const { container } = renderLogin();
+    await goToOtpStep(container, '919820198765');
+
+    fireEvent.click(screen.getByTestId('otpBack'));
+
+    await waitFor(() => expect(screen.getByText('Enter your phone number')).toBeInTheDocument());
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    // Pre-filled rather than blank: the user is correcting a digit, not starting over.
+    expect(phone.value).toBe('919820198765');
+  });
+
+  it('sends the code to the corrected number after going back', async () => {
+    const { container } = renderLogin();
+    await goToOtpStep(container, '919820198765');
+
+    fireEvent.click(screen.getByTestId('otpBack'));
+    await waitFor(() => expect(screen.getByText('Enter your phone number')).toBeInTheDocument());
+
+    mockedAxios.post.mockClear();
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '919820100000' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() =>
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '919820100000' })
+    );
+    await waitFor(() =>
+      expect(screen.getByText('We sent a one-time code to 919820100000 on WhatsApp.')).toBeInTheDocument()
+    );
+  });
+
+  it('clears the code entered for the previous number', async () => {
+    const { container } = renderLogin();
+    await goToOtpStep(container);
+
+    const otp = container.querySelector('input') as HTMLInputElement;
+    fireEvent.change(otp, { target: { value: '123456' } });
+
+    fireEvent.click(screen.getByTestId('otpBack'));
+    await waitFor(() => expect(screen.getByText('Enter your phone number')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+    await waitFor(() => expect(screen.getByText('Enter the OTP')).toBeInTheDocument());
+
+    // A code minted for the previous number must not be sitting in the field ready to submit.
+    expect((container.querySelector('input') as HTMLInputElement).value).toBe('');
+  });
+
+  // Note this passes because requesting a code for the corrected number sets a fresh countdown,
+  // not because of any reset in the back handler — the behaviour is what matters, but do not read
+  // this as covering onChangeNumber's setResendIn(0), which is not observable from the DOM.
+  it('shows a full countdown for the corrected number, not the remainder of the old one', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { container } = renderLogin();
+    await goToOtpStep(container);
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByTestId('otpResend')).toHaveTextContent(
+      `Resend in ${WEB_CHANNEL_OTP_RESEND_SECONDS - 10}s`
+    );
+
+    fireEvent.click(screen.getByTestId('otpBack'));
+    await waitFor(() => expect(screen.getByText('Enter your phone number')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+    await waitFor(() => expect(screen.getByText('Enter the OTP')).toBeInTheDocument());
+
+    expect(screen.getByTestId('otpResend')).toHaveTextContent(
+      `Resend in ${WEB_CHANNEL_OTP_RESEND_SECONDS}s`
+    );
+  });
+
   it('falls back to generic copy when verify-otp fails with no response (network error)', async () => {
     const { container } = renderLogin();
     await goToOtpStep(container);
