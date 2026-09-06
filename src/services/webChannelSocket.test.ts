@@ -62,8 +62,11 @@ describe('webChannelSocket', () => {
       handlers: { onNewMessage },
     });
 
-    // Socket constructed with token as a connect param
-    expect(SocketMock).toHaveBeenCalledWith(expect.any(String), { params: { token: 'my-token' } });
+    // Socket constructed with a params FUNCTION, which phoenix re-evaluates on every connect
+    // attempt. With nothing stored yet it falls back to the token it was handed.
+    expect(SocketMock).toHaveBeenCalledWith(expect.any(String), { params: expect.any(Function) });
+    const params = SocketMock.mock.calls[0][1].params as () => { token: string | null };
+    expect(params()).toEqual({ token: 'my-token' });
     expect(mockSocket.connect).toHaveBeenCalled();
     // joined the correct channel topic
     expect(mockSocket.channel).toHaveBeenCalledWith('web_channel:42', {});
@@ -113,5 +116,27 @@ describe('webChannelSocket', () => {
 
     expect(mockChannel.leave).toHaveBeenCalled();
     expect(mockSocket.disconnect).toHaveBeenCalled();
+  });
+  it('re-reads the stored token on each connect, so a reconnect after a renewal is authorised', async () => {
+    localStorage.setItem(
+      'web_channel_session',
+      JSON.stringify({ token: 'token-at-mount', contactId: 42 })
+    );
+
+    mockChannel.join.mockReturnValue(makeReceiver({ ok: { messages: [] } }));
+    await connectAndJoin({ token: 'token-at-mount', contactId: 42 });
+    const params = SocketMock.mock.calls[0][1].params as () => { token: string | null };
+    expect(params()).toEqual({ token: 'token-at-mount' });
+
+    // The silent refresh replaces the stored token while the socket is already open. A phoenix
+    // auto-reconnect must present the NEW one — a params object captured at mount would retry
+    // forever with the dead token and surface as a permanent "Reconnecting…".
+    localStorage.setItem(
+      'web_channel_session',
+      JSON.stringify({ token: 'token-after-renewal', contactId: 42 })
+    );
+
+    expect(params()).toEqual({ token: 'token-after-renewal' });
+    localStorage.clear();
   });
 });

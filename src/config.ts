@@ -63,8 +63,23 @@ export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;
 export const WEB_CHANNEL_VERIFY_OTP = `${API_BASE}/v1/web_channel/verify-otp`;
 
+// Exchanges a still-valid token for a fresh one. It renews rather than re-authenticates, so it
+// only works while the current token is alive — an expired one comes back 401 and the user has
+// to go through the OTP flow again.
+export const WEB_CHANNEL_RENEW_TOKEN = `${API_BASE}/v1/web_channel/renew-token`;
+
 // How long the OTP resend button stays disabled, in seconds. Source of truth is the
 // backend's per-IP throttle — `config :glific, :web_channel_otp_rate_limit, scale_ms: 30_000,
 // count: 1` in the Glific repo's config/config.exs. Keep the two in step: a shorter countdown
 // here just walks the user into a 429.
 export const WEB_CHANNEL_OTP_RESEND_SECONDS = 30;
+
+// Silent-refresh tuning. The backend mints a one-hour token, so renewing with ten minutes left
+// gives a wide margin: a tab that is asleep for most of that window still has plenty of time to
+// renew when it wakes, and a refresh that fails transiently has ~20 retries before the token dies.
+export const WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS = 10 * 60;
+
+// How often the refresh check runs. Cheap (it reads localStorage and compares a number; the
+// network call only happens inside the threshold), and browsers throttle it heavily in a
+// background tab anyway — which is why the hook also checks on focus.
+export const WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS = 30_000;

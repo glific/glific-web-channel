@@ -12,7 +12,13 @@ import { Card } from '@/components/ui/card';
 import { Logo } from '@/components/branding/Logo';
 import { getBranding } from '@/services/branding';
 import { WEB_CHANNEL_OTP_RESEND_SECONDS } from '@/config';
-import { requestOtp, verifyOtp, setWebChannelSession, webChannelErrorMessage } from '@/services/webChannelAuth';
+import {
+  requestOtp,
+  verifyOtp,
+  setWebChannelSession,
+  webChannelErrorMessage,
+  webChannelErrorStatus,
+} from '@/services/webChannelAuth';
 
 // Courtesy pre-check only: it saves a round trip on an obvious typo. The server stays the
 // authority on what a valid number is (it runs ExPhoneNumber), so a number that passes here
@@ -59,17 +65,32 @@ export const Login = () => {
     return () => clearInterval(interval);
   }, [counting]);
 
+  const goToOtpStep = (phoneNumber: string) => {
+    setPhone(phoneNumber);
+    setResendIn(WEB_CHANNEL_OTP_RESEND_SECONDS);
+    setStep('otp');
+  };
+
   const onPhoneSubmit = (values: PhoneValues) => {
     setError('');
     setNotice('');
     setLoading(true);
     requestOtp(values.phone)
-      .then(() => {
-        setPhone(values.phone);
-        setResendIn(WEB_CHANNEL_OTP_RESEND_SECONDS);
-        setStep('otp');
+      .then(() => goToOtpStep(values.phone))
+      .catch((requestError) => {
+        // A 429 here is not a failure to send — it means a code was ALREADY sent to this number
+        // and the user asked again inside the throttle window. Keeping them on the phone step
+        // leaves a live code sitting in their WhatsApp with nowhere to type it, so advance
+        // exactly as a 200 does and show the server's wait as a notice: it is information about
+        // a code they have, not an error about one they don't.
+        if (webChannelErrorStatus(requestError) === 429) {
+          goToOtpStep(values.phone);
+          setNotice(webChannelErrorMessage(requestError));
+          return;
+        }
+
+        setError(webChannelErrorMessage(requestError));
       })
-      .catch((requestError) => setError(webChannelErrorMessage(requestError)))
       .finally(() => setLoading(false));
   };
 

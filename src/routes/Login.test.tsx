@@ -165,7 +165,9 @@ describe('<Login />', () => {
     );
   });
 
-  it('renders the server message verbatim when request-otp is throttled with a 429', async () => {
+  // A 429 on request-otp means a code IS already in the user's WhatsApp. Leaving them on the
+  // phone step would hand them a live code with nowhere to type it.
+  it('advances to the OTP step when request-otp is throttled with a 429', async () => {
     const { container } = renderLogin();
     await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
 
@@ -182,10 +184,72 @@ describe('<Login />', () => {
     fireEvent.change(phone, { target: { value: '919999999999' } });
     fireEvent.click(screen.getByTestId('phoneSubmit'));
 
+    await waitFor(() => expect(screen.getByText('Enter the OTP')).toBeInTheDocument());
+    expect(screen.getByText('We sent a one-time code to 919999999999 on WhatsApp.')).toBeInTheDocument();
+  });
+
+  it('shows the throttle wait as a notice, not an error, on the OTP step', async () => {
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    mockedAxios.post.mockImplementationOnce(() =>
+      Promise.reject({
+        response: {
+          status: 429,
+          data: { error: { status: 429, message: 'An OTP was just sent. Please try again in 30 seconds.' } },
+        },
+      })
+    );
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '919999999999' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    // the server's wait, verbatim — but as information about a code they have, not a failure
     await waitFor(() =>
-      expect(screen.getByTestId('phoneRequestError')).toHaveTextContent(
+      expect(screen.getByTestId('otpNotice')).toHaveTextContent(
         'An OTP was just sent. Please try again in 30 seconds.'
       )
+    );
+    expect(screen.queryByTestId('otpError')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('phoneRequestError')).not.toBeInTheDocument();
+  });
+
+  it('starts the resend countdown after a 429, so the user cannot immediately re-throttle', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    mockedAxios.post.mockImplementationOnce(() =>
+      Promise.reject({
+        response: {
+          status: 429,
+          data: { error: { status: 429, message: 'An OTP was just sent. Please try again in 30 seconds.' } },
+        },
+      })
+    );
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '919999999999' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() => expect(screen.getByText('Enter the OTP')).toBeInTheDocument());
+    expect(screen.getByTestId('otpResend')).toBeDisabled();
+    expect(screen.getByTestId('otpResend')).toHaveTextContent(`Resend in ${WEB_CHANNEL_OTP_RESEND_SECONDS}s`);
+  });
+
+  it('still keeps the user on the phone step for every other request-otp failure', async () => {
+    const { container } = renderLogin();
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    mockedAxios.post.mockImplementationOnce(() => Promise.reject({ response: { status: 500 } }));
+
+    const phone = container.querySelector('input[type="tel"]') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '919999999999' } });
+    fireEvent.click(screen.getByTestId('phoneSubmit'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('phoneRequestError')).toHaveTextContent('Something went wrong. Please try again.')
     );
     expect(screen.queryByText('Enter the OTP')).not.toBeInTheDocument();
   });

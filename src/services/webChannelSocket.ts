@@ -1,6 +1,7 @@
 import { Socket, Channel } from 'phoenix';
 
 import { WEB_SOCKET } from '@/config';
+import { getWebChannelToken } from '@/services/webChannelAuth';
 
 export interface WebChannelMessage {
   id: number | string;
@@ -38,7 +39,14 @@ export interface WebChannelConnection {
 // Open the phoenix socket, join the contact's channel and resolve with the initial messages.
 // The phoenix client provides auto-reconnect + heartbeats out of the box.
 export const connectAndJoin = ({ token, contactId, handlers = {} }: ConnectParams): Promise<WebChannelConnection> => {
-  const socket = new Socket(WEB_SOCKET, { params: { token } });
+  // params is a FUNCTION, not the token value, because phoenix re-evaluates it on every connect
+  // attempt (`closure()` passes a function through, and `this.params()` is called when building
+  // the socket URL). The token lives an hour and is silently renewed in the background, so a
+  // static value here would mean any auto-reconnect after a renewal — or after the tab slept
+  // through one — retried forever with a token that had already been replaced, surfacing as a
+  // permanent "Reconnecting…" rather than as an auth failure. Falls back to the token we were
+  // handed for the very first connect, before anything has been stored.
+  const socket = new Socket(WEB_SOCKET, { params: () => ({ token: getWebChannelToken() ?? token }) });
 
   if (handlers.onOpen) socket.onOpen(handlers.onOpen);
   if (handlers.onError) socket.onError(handlers.onError);
