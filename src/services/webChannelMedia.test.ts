@@ -77,14 +77,22 @@ describe('webChannelMedia', () => {
   });
 
   // The server matches documents by substring on the content type, and the long
-  // `application/vnd.openxmlformats-…` types docx and xlsx arrive as contain neither "docx" nor
-  // the backend's "xlxs" — offering them would only produce a 415 after the picker.
+  // Pinned against the server's document allowlist. These are the exact types a browser sends for
+  // an Office file, and the server matches them exactly rather than by substring.
   describe('UPLOAD_ACCEPT', () => {
+    it.each([
+      'application/pdf',
+      'application/msword',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ])('offers %s, which the server accepts', (contentType) => {
+      expect(UPLOAD_ACCEPT).toContain(contentType);
+    });
+
     it('offers no document type the server would refuse', () => {
-      expect(UPLOAD_ACCEPT).toContain('application/pdf');
-      expect(UPLOAD_ACCEPT).not.toContain('openxmlformats');
-      expect(UPLOAD_ACCEPT).not.toContain('.docx');
-      expect(UPLOAD_ACCEPT).not.toContain('.xlsx');
+      expect(UPLOAD_ACCEPT).not.toContain('application/zip');
+      expect(UPLOAD_ACCEPT).not.toContain('text/html');
     });
   });
 
