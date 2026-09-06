@@ -181,6 +181,15 @@ export const Chat = () => {
       .finally(() => setLoadingMore(false));
   };
 
+  // An interactive option is answered as ordinary text, the way WhatsApp records one, so nothing
+  // downstream — the message row, the staff inbox, a future flow — has to know it came from a tap.
+  const handleSelectOption = (title: string) => {
+    if (!channelRef.current) return;
+
+    appendLocal({ body: title, type: 'text' });
+    pushNewMessage(channelRef.current, title).catch(() => {});
+  };
+
   const handleSend = () => {
     // With a file attached the composer's text is its caption, so the same button sends both.
     if (media.pending) {
@@ -237,7 +246,7 @@ export const Chat = () => {
       >
         {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} onSelectOption={handleSelectOption} />
         ))}
       </div>
 
