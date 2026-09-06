@@ -61,6 +61,26 @@ describe('<Login />', () => {
     vi.useRealTimers();
   });
 
+  it('names the organisation in a consent notice before the number can be submitted', async () => {
+    renderLogin();
+
+    await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+
+    // On the phone step, so consent is given before the number leaves the browser — not on the
+    // OTP step, by which point the number has already been submitted.
+    expect(screen.getByTestId('consentNotice')).toHaveTextContent(
+      'By continuing, you agree to receive messages from Test NGO on this chat.'
+    );
+  });
+
+  it('does not repeat the consent notice on the OTP step', async () => {
+    const { container } = renderLogin();
+
+    await goToOtpStep(container);
+
+    expect(screen.queryByTestId('consentNotice')).not.toBeInTheDocument();
+  });
+
   it('renders the phone step with the NGO logo, name and "powered by Glific" branding', async () => {
     const { container } = renderLogin();
 
