@@ -2,9 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import {
   connectAndJoin,
+  getActiveChannel,
+  onWebChannelSessionEvent,
   pushNewMessage,
+  pushNewMediaMessage,
+  pushNewLocationMessage,
+  pushRenewToken,
   pushLoadMore,
-  pushUpdateName,
   disconnect,
 } from './webChannelSocket';
 
@@ -45,6 +49,25 @@ vi.mock('phoenix', () => ({
   Socket: SocketMock,
   Channel: class {},
 }));
+
+// A join/push result whose hooks are held rather than fired, so a test can drive the reply — and
+// fire it more than once, the way phoenix re-runs the join hooks on every rejoin.
+const makeHeldReceiver = () => {
+  const hooks: Record<string, (payload?: any) => void> = {};
+  const chain: any = {
+    receive: vi.fn((event: string, cb: (payload?: any) => void) => {
+      hooks[event] = cb;
+      return chain;
+    }),
+  };
+  return { chain, reply: (event: string, payload?: any) => hooks[event]?.(payload) };
+};
+
+// Fire the server push the channel subscribed to with `channel.on(event, handler)`.
+const fireServerPush = (event: string) => {
+  const subscription = mockChannel.on.mock.calls.find(([name]: [string]) => name === event);
+  subscription?.[1]();
+};
 
 describe('webChannelSocket', () => {
   beforeEach(() => {
@@ -103,20 +126,120 @@ describe('webChannelSocket', () => {
     expect(page).toEqual(older);
   });
 
-  it('pushUpdateName pushes the new name and resolves on ok', async () => {
-    mockChannel.push.mockReturnValue(makeReceiver({ ok: {} }));
-
-    await pushUpdateName(mockChannel as any, 'New Name');
-
-    expect(mockChannel.push).toHaveBeenCalledWith('update_name', { name: 'New Name' });
-  });
-
   it('disconnect leaves the channel and disconnects the socket', () => {
     disconnect(mockSocket as any, mockChannel as any);
 
     expect(mockChannel.leave).toHaveBeenCalled();
     expect(mockSocket.disconnect).toHaveBeenCalled();
   });
+  it('pushNewMediaMessage carries only the hosted url, never the bytes', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ ok: {} }));
+
+    await pushNewMediaMessage(mockChannel as any, {
+      type: 'image',
+      url: 'https://cdn.test/cat.png',
+      content_type: 'image/png',
+      caption: 'my cat',
+    });
+
+    expect(mockChannel.push).toHaveBeenCalledWith('new_media_message', {
+      type: 'image',
+      url: 'https://cdn.test/cat.png',
+      content_type: 'image/png',
+      caption: 'my cat',
+    });
+  });
+
+  it('pushNewLocationMessage pushes the coordinates', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ ok: {} }));
+
+    await pushNewLocationMessage(mockChannel as any, { latitude: 12.9, longitude: 77.5 });
+
+    expect(mockChannel.push).toHaveBeenCalledWith('new_location_message', { latitude: 12.9, longitude: 77.5 });
+  });
+
+  it('pushRenewToken hands the channel the renewed token', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ ok: {} }));
+
+    await pushRenewToken(mockChannel as any, 'renewed-token');
+
+    expect(mockChannel.push).toHaveBeenCalledWith('renew_token', { token: 'renewed-token' });
+  });
+
+  it('pushRenewToken rejects when the server refuses the token', async () => {
+    mockChannel.push.mockReturnValue(makeReceiver({ error: { reason: 'invalid_token' } }));
+
+    await expect(pushRenewToken(mockChannel as any, 'someone-elses-token')).rejects.toEqual({
+      reason: 'invalid_token',
+    });
+  });
+
+  it('exposes the joined channel so the session refresh can renew on it, and forgets it on disconnect', async () => {
+    mockChannel.join.mockReturnValue(makeReceiver({ ok: { messages: [] } }));
+
+    await connectAndJoin({ token: 't', contactId: 1 });
+    expect(getActiveChannel()).toBe(mockChannel);
+
+    disconnect(mockSocket as any, mockChannel as any);
+    expect(getActiveChannel()).toBeNull();
+  });
+
+  it('fans the server session pushes out to subscribers until they unsubscribe', async () => {
+    mockChannel.join.mockReturnValue(makeReceiver({ ok: { messages: [] } }));
+    const listener = vi.fn();
+    const unsubscribe = onWebChannelSessionEvent(listener);
+
+    await connectAndJoin({ token: 't', contactId: 1 });
+    fireServerPush('token_expiring');
+    fireServerPush('session_expired');
+
+    expect(listener).toHaveBeenNthCalledWith(1, 'token_expiring');
+    expect(listener).toHaveBeenNthCalledWith(2, 'session_expired');
+
+    unsubscribe();
+    fireServerPush('token_expiring');
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('closes the socket a failed join left behind, which the caller never received', async () => {
+    const join = makeHeldReceiver();
+    mockChannel.join.mockReturnValue(join.chain);
+
+    const connecting = connectAndJoin({ token: 't', contactId: 1 });
+    join.reply('error', { reason: 'unauthorized' });
+    await expect(connecting).rejects.toEqual({ reason: 'unauthorized' });
+
+    // phoenix keeps the socket open and retries the join on its own, so the connection outlives
+    // the rejection — but the caller holds no reference to it and can only unmount with nulls.
+    join.reply('ok', { messages: [] });
+    expect(getActiveChannel()).toBe(mockChannel);
+
+    disconnect(null, null);
+
+    expect(mockSocket.disconnect).toHaveBeenCalled();
+    expect(getActiveChannel()).toBeNull();
+  });
+
+  it('re-presents a token renewed since the socket connected when the channel rejoins', async () => {
+    const join = makeHeldReceiver();
+    mockChannel.join.mockReturnValue(join.chain);
+    mockChannel.push.mockReturnValue(makeReceiver({ ok: {} }));
+    localStorage.setItem('web_channel_session', JSON.stringify({ token: 'token-at-connect', contactId: 1 }));
+
+    const connecting = connectAndJoin({ token: 'token-at-connect', contactId: 1 });
+    join.reply('ok', { messages: [] });
+    await connecting;
+    expect(mockChannel.push).not.toHaveBeenCalled();
+
+    // A rejoin does not re-run connect/3, so the server is still holding the expiry of the token
+    // the socket connected with.
+    localStorage.setItem('web_channel_session', JSON.stringify({ token: 'token-after-renewal', contactId: 1 }));
+    join.reply('ok', { messages: [] });
+
+    expect(mockChannel.push).toHaveBeenCalledWith('renew_token', { token: 'token-after-renewal' });
+    localStorage.clear();
+  });
+
   it('re-reads the stored token on each connect, so a reconnect after a renewal is authorised', async () => {
     localStorage.setItem(
       'web_channel_session',

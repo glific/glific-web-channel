@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 
-import { WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS, WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS } from '@/config';
+import {
+  WEB_CHANNEL_RENEW_PUSH_ATTEMPTS,
+  WEB_CHANNEL_RENEW_PUSH_RETRY_MS,
+  WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS,
+  WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS,
+} from '@/config';
 import {
   clearWebChannelSession,
   decodeTokenExpiry,
@@ -10,6 +15,7 @@ import {
   setWebChannelSession,
   webChannelErrorStatus,
 } from '@/services/webChannelAuth';
+import { getActiveChannel, onWebChannelSessionEvent, pushRenewToken } from '@/services/webChannelSocket';
 
 /**
  * Renews the stored token before it expires, so a beneficiary mid-conversation is never bounced
@@ -27,8 +33,29 @@ export const useSessionRefresh = (): void => {
 
   useEffect(() => {
     let active = true;
+    const retryTimers = new Set<ReturnType<typeof setTimeout>>();
 
-    const refreshIfExpiringSoon = () => {
+    // The channel read the expiry once, at join, so storing the token is not enough on its own.
+    // Retried because nothing else would try again: the server warns once per token, and the
+    // widget's own tick sees a freshly stored token with an hour of life and returns early — so
+    // one dropped push (a 10s push timeout, or an error reply) ends in session_expired while the
+    // client holds a good token.
+    const handOverToChannel = (renewed: string, attempt = 1) => {
+      // Re-checked on every attempt, not just the first: a renewal during the wait leaves this
+      // one carrying a token the session has already moved past.
+      if (getWebChannelToken() !== renewed) return;
+
+      const channel = getActiveChannel();
+      if (!channel) return;
+
+      pushRenewToken(channel, renewed).catch(() => {
+        if (!active || attempt >= WEB_CHANNEL_RENEW_PUSH_ATTEMPTS) return;
+
+        retryTimers.add(setTimeout(() => handOverToChannel(renewed, attempt + 1), WEB_CHANNEL_RENEW_PUSH_RETRY_MS));
+      });
+    };
+
+    const renew = ({ force }: { force: boolean }) => {
       if (refreshing.current) return;
 
       const token = getWebChannelToken();
@@ -39,13 +66,16 @@ export const useSessionRefresh = (): void => {
       if (expiry === null) return;
 
       const secondsLeft = expiry - Date.now() / 1000;
-      if (secondsLeft > WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS) return;
+      if (!force && secondsLeft > WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS) return;
 
       refreshing.current = true;
       renewToken(token)
         .then(({ data }) => {
           const { token: renewed, contact_id: contactId, name } = data?.data ?? {};
-          if (renewed) setWebChannelSession({ token: renewed, contactId, name });
+          if (!renewed) return;
+
+          setWebChannelSession({ token: renewed, contactId, name });
+          handOverToChannel(renewed);
         })
         .catch((error) => {
           const status = webChannelErrorStatus(error);
@@ -63,8 +93,25 @@ export const useSessionRefresh = (): void => {
         });
     };
 
+    // Wrapped rather than passed directly: a DOM listener is handed an Event, which would read
+    // as a forced renewal.
+    const refreshIfExpiringSoon = () => renew({ force: false });
+
     // The tab may have been restored with a token already near expiry.
     refreshIfExpiringSoon();
+
+    // The server's warning arrives when it considers renewal due, so honour it now rather than
+    // up to a tick later; its window and the widget's threshold are meant to agree, but a clock
+    // skew between them would otherwise leave the renewal to the sweep that kills the channel.
+    const unsubscribe = onWebChannelSessionEvent((event) => {
+      if (event === 'token_expiring') {
+        renew({ force: true });
+        return;
+      }
+
+      clearWebChannelSession();
+      if (active) navigate('/login', { replace: true });
+    });
 
     const interval = setInterval(refreshIfExpiringSoon, WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS);
     const onVisibilityChange = () => {
@@ -78,6 +125,8 @@ export const useSessionRefresh = (): void => {
 
     return () => {
       active = false;
+      unsubscribe();
+      retryTimers.forEach(clearTimeout);
       clearInterval(interval);
       window.removeEventListener('focus', refreshIfExpiringSoon);
       document.removeEventListener('visibilitychange', onVisibilityChange);

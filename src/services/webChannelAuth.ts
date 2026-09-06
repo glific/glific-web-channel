@@ -32,12 +32,6 @@ export const getWebChannelContact = (): { contactId: number | string; name?: str
   return { contactId: session.contactId, name: session.name };
 };
 
-export const setWebChannelName = (name: string): void => {
-  const session = getWebChannelSession();
-  if (!session) return;
-  setWebChannelSession({ ...session, name });
-};
-
 export const clearWebChannelSession = (): void => {
   localStorage.removeItem(WEB_CHANNEL_SESSION_KEY);
 };
