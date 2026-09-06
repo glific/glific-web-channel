@@ -9,12 +9,21 @@ export interface UploadedMedia {
   content_type: string | null;
 }
 
-// The server matches a document by substring against the browser-sent content type, and a docx
-// or xlsx arrives as `application/vnd.openxmlformats-…`, which contains neither "docx" nor the
-// backend's "xlxs" — so pdf is the only document that gets through today. Offering the others
-// would only walk the user into a 415. Audio is offered whole even though the server refuses
-// ogg: `accept` cannot express an exception, and the picker is a hint, not the authority.
-export const UPLOAD_ACCEPT = 'image/*,video/*,audio/*,application/pdf,.pdf';
+// Audio is offered whole even though the server refuses ogg: `accept` cannot express an
+// exception, and the picker is a hint rather than the authority.
+export const UPLOAD_ACCEPT = [
+  'image/*',
+  'video/*',
+  'audio/*',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx',
+].join(',');
 
 // Anything the browser cannot name goes as a document: a picker that reports no MIME type is
 // still likely to be a file the document branch accepts.
@@ -53,6 +62,7 @@ const UPLOAD_ERRORS: Record<string, string> = {
   // copy asks for the one thing the user can do from this screen.
   unauthorized: 'Your session has ended. Refresh the page to sign in again.',
   web_channel_disabled: 'Messaging is not available for this organisation yet.',
+  storage_unavailable: 'Attachments are not available right now. You can still send a message.',
   upload_failed: 'Upload failed. Please try again.',
 };
 
