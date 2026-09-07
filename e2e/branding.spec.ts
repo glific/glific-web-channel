@@ -6,7 +6,7 @@ import {
   LIGHT_ACCENT_ORG,
   BRANDING_ROUTE,
   buttonContrast,
-  expectCircularLogo,
+  logoFrame,
   rootVar,
   serveBranding,
   serveBrandingNotFound,
@@ -36,6 +36,7 @@ test.describe('per-org theming', () => {
       [darkOrg, DARK_ACCENT_ORG],
       [lightOrg, LIGHT_ACCENT_ORG],
     ] as const) {
+      await expect(page.getByTestId('phoneSubmit')).toBeVisible();
       await expect(page.getByText(org.display_name)).toBeVisible();
       await expect(page.getByTestId('orgLogo')).toHaveAttribute('src', org.logo_url!);
       await expect(page).toHaveTitle(`${org.display_name} — Chat`);
@@ -46,8 +47,8 @@ test.describe('per-org theming', () => {
   });
 
   // Whatever an org uploads — landscape wordmark, square mark, tall crest — the frame is the
-  // same circle, so two orgs' login cards stay visually consistent.
-  test('the logo renders as a circle whatever its aspect ratio', async ({ context }) => {
+  // same square, so two orgs' login cards stay visually consistent.
+  test('the logo renders in a fixed square frame whatever its aspect ratio', async ({ context }) => {
     const wide = await context.newPage();
     await serveBranding(wide, DARK_ACCENT_ORG);
     await wide.route('https://cdn.example.org/**', (route) =>
@@ -59,10 +60,12 @@ test.describe('per-org theming', () => {
     );
     await wide.goto('/login');
 
-    const { width, height, radius } = await expectCircularLogo(wide);
+    const { width, height, radius } = await logoFrame(wide);
 
     expect(Math.round(width)).toBe(Math.round(height));
-    expect(radius).toBeGreaterThanOrEqual(width / 2);
+    // Rounded, but nowhere near a circle — a circle would crop a wordmark to uselessness.
+    expect(radius).toBeGreaterThan(0);
+    expect(radius).toBeLessThan(width / 4);
     // Contained, not cropped — a 600x80 wordmark must not have its sides cut off.
     await expect(wide.getByTestId('orgLogo')).toHaveCSS('object-fit', 'contain');
   });
@@ -84,6 +87,10 @@ test.describe('per-org theming', () => {
     const prompt = await context.newPage();
     await serveBranding(prompt, LIGHT_ACCENT_ORG);
     await prompt.goto('/login');
+    // goto resolves on `load`, which can fire before the async bootstrap has applied the
+    // palette. Wait for something only the render produces before reading :root.
+    await expect(prompt.getByTestId('phoneSubmit')).toBeVisible();
+
     const settled = await rootVar(prompt, '--primary');
     expect(settled).not.toBe(UNTHEMED_PRIMARY);
 

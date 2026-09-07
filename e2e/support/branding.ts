@@ -85,13 +85,12 @@ export const buttonContrast = (page: Page, testId = 'phoneSubmit') =>
   }, testId);
 
 /**
- * Assert the logo is rendered as a circle.
+ * The logo's rendered box and corner radius.
  *
- * Checked numerically rather than against a literal `border-radius`: Tailwind v4's
- * `rounded-full` computes to `calc(infinity * 1px)`, which serialises as `3.35544e+07px`.
- * A radius of at least half the box, on a square box, is what "circle" actually means.
+ * Measured numerically rather than compared against a literal `border-radius`, because
+ * Tailwind serialises those unpredictably — `rounded-full` computes to `calc(infinity * 1px)`.
  */
-export const expectCircularLogo = async (page: Page) => {
+export const logoFrame = async (page: Page) => {
   const logo = page.getByTestId('orgLogo');
   const box = (await logo.boundingBox())!;
   const radius = await logo.evaluate((element) => parseFloat(getComputedStyle(element).borderRadius));
