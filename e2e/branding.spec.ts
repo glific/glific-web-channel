@@ -113,7 +113,8 @@ test.describe('per-org theming', () => {
     expect(await rootVar(slow, '--primary')).toBe(settled);
   });
 
-  test('falls back to the default theme when the org has no web channel', async ({ page }) => {
+  // 404 is a settled state, so the app still renders — on the default theme, with the banner.
+  test('uses the default theme when the org has no web channel', async ({ page }) => {
     await serveBrandingNotFound(page);
 
     await page.goto('/login');

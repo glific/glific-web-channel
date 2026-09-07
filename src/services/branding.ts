@@ -10,8 +10,18 @@ export interface Branding {
   display_name: string;
 }
 
-// What an org that has set nothing — or a backend that is unreachable — renders as.
+// Used only when the org is reachable but has set nothing, and for the disabled case where the
+// banner carries the explanation. A branding fetch that *fails* does not fall back — see
+// BrandingStatus below.
 const FALLBACK_BRANDING: Branding = { theme: DEFAULT_THEME, logo_url: null, display_name: 'Glific' };
+
+/**
+ * - `ok`          branding resolved; render the app
+ * - `disabled`    404 — this org has not enabled the web channel; render the app with a banner
+ * - `unavailable` the request failed; render an error page rather than a plausible-looking
+ *                 default, which under an NGO's own domain would read as the wrong organisation
+ */
+export type BrandingStatus = 'ok' | 'disabled' | 'unavailable';
 
 // Resolved once during bootstrap, before the first render, so components read it synchronously
 // and no loading state is needed anywhere.
@@ -43,8 +53,7 @@ export const applyBranding = (next: Branding): void => {
 
 export interface BrandingResult {
   branding: Branding | null;
-  /** false only for a definitive 404 — a network failure leaves this true. */
-  enabled: boolean;
+  status: BrandingStatus;
 }
 
 /**
@@ -54,22 +63,29 @@ export interface BrandingResult {
 export const fetchBranding = async (): Promise<BrandingResult> => {
   try {
     const { data } = await axios.get(WEB_CHANNEL_BRANDING);
-    return { branding: (data?.data as Branding) ?? null, enabled: true };
+    return { branding: (data?.data as Branding) ?? null, status: 'ok' };
   } catch (error: any) {
-    return { branding: null, enabled: error?.response?.status !== 404 };
+    return { branding: null, status: error?.response?.status === 404 ? 'disabled' : 'unavailable' };
   }
 };
 
 /**
  * Resolve and apply the branding. Awaited before the first render so there is no flash of the
- * default palette; a failure leaves the default in place and still renders.
+ * default palette.
+ *
+ * Returns the status so the caller can decide what to render: a failed fetch must not quietly
+ * become the default palette, because a Glific-looking page served under an NGO's own domain
+ * reads as the wrong organisation rather than as an error.
  */
-export const loadBranding = async (): Promise<Branding> => {
+export const loadBranding = async (): Promise<BrandingStatus> => {
   const result = await fetchBranding();
 
-  webChannelEnabled = result.enabled;
+  webChannelEnabled = result.status !== 'disabled';
+
+  if (result.status === 'unavailable') return result.status;
+
   branding = result.branding ?? FALLBACK_BRANDING;
   applyBranding(branding);
 
-  return branding;
+  return result.status;
 };

@@ -72,7 +72,11 @@ redeploy.
 Three properties worth knowing before changing `src/services/branding.ts`:
 
 - **First paint is held** behind the fetch (`src/main.tsx`), so there is no flash of the default
-  palette. A failed or 404'd fetch falls back to `index.css` and still renders.
+  palette.
+- **A failed fetch does not fall back.** `loadBranding` returns `ok` / `disabled` / `unavailable`:
+  a 404 renders the app with a "not enabled" banner, but an unreachable backend renders a
+  retryable error page. Quietly serving the default palette under an NGO's own domain would read
+  as the wrong organisation rather than as a failure.
 - **The foreground ships with the palette, never supplied by the org.** An organisation that
   picked its own foreground could make its button text vanish; contrast is an accessibility
   obligation, not a preference. `themes.test.ts` asserts every pair clears WCAG AA.

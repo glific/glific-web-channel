@@ -74,7 +74,7 @@ describe('fetchBranding', () => {
 
     await expect(fetchBranding()).resolves.toEqual({
       branding: theme,
-      enabled: true,
+      status: 'ok',
     });
     expect(mockedAxios.get).toHaveBeenCalledWith(WEB_CHANNEL_BRANDING);
   });
@@ -84,17 +84,18 @@ describe('fetchBranding', () => {
 
     await expect(fetchBranding()).resolves.toEqual({
       branding: null,
-      enabled: false,
+      status: 'disabled',
     });
   });
 
-  it('does not claim the channel is disabled when the backend is merely unreachable', async () => {
-    // Telling someone the channel is off when it is actually a network blip would be wrong.
+  it('separates an unreachable backend from a disabled channel', async () => {
+    // Telling someone the channel is off when it is actually a network blip would be wrong, and
+    // the two render differently — a banner versus an error page.
     mockedAxios.get.mockRejectedValue(new Error('Network Error'));
 
     await expect(fetchBranding()).resolves.toEqual({
       branding: null,
-      enabled: true,
+      status: 'unavailable',
     });
   });
 });
@@ -119,23 +120,24 @@ describe('loadBranding', () => {
     expect(document.documentElement.style.getPropertyValue('--primary')).toBe(THEMES.amber.primary);
   });
 
-  it('falls back to the default theme and still resolves when /branding fails', async () => {
+  // Deliberately does NOT fall back: a Glific-looking page under an NGO's own domain reads as
+  // the wrong organisation rather than as a failure, so the caller renders an error page.
+  it('reports unavailable and paints nothing when /branding fails', async () => {
     mockedAxios.get.mockRejectedValue(new Error('Network Error'));
 
-    await expect(loadBranding()).resolves.toEqual({
-      theme: 'zinc',
-      logo_url: null,
-      display_name: 'Glific',
-    });
-    expect(document.documentElement.style.getPropertyValue('--primary')).toBe(THEMES.zinc.primary);
+    await expect(loadBranding()).resolves.toBe('unavailable');
+
+    expect(document.documentElement.style.getPropertyValue('--primary')).toBe('');
     expect(isWebChannelEnabled()).toBe(true);
   });
 
-  it('records the channel as disabled after a 404', async () => {
+  // A 404 is a settled state, not a transient one, so the app still renders — with a banner.
+  it('records the channel as disabled after a 404 and still paints a theme', async () => {
     mockedAxios.get.mockRejectedValue({ response: { status: 404 } });
 
-    await loadBranding();
+    await expect(loadBranding()).resolves.toBe('disabled');
 
     expect(isWebChannelEnabled()).toBe(false);
+    expect(document.documentElement.style.getPropertyValue('--primary')).toBe(THEMES.zinc.primary);
   });
 });
