@@ -11,17 +11,26 @@ import mkcert from "vite-plugin-mkcert";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vite.dev/config/
+// mkcert installs a local certificate authority and downloads a binary from GitHub, so it must
+// only ever run for a real `yarn dev` session. Three things resolve this config and none of them
+// wants it:
+//
+//   vite build    - `command === "build"`
+//   vite preview  - also "serve"; Playwright serves the production build over plain HTTP
+//   vitest        - also "serve", which is what broke CI: `yarn test` tried to download mkcert
+//                   and failed on a GitHub 504
+//
+// CI is excluded outright as a backstop, since no CI job should be installing a CA.
+const isDevServer = (command: string, isPreview?: boolean) =>
+  command === "serve" && !isPreview && !process.env.VITEST && !process.env.CI;
+
 export default defineConfig(({ command, isPreview }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    // Dev-only: mkcert installs a local CA and generates trusted certs for glific.test.
-    // Origin https://glific.test:5173 is accepted by Phoenix check_origin (*.glific.test).
-    // Skipped for `vite build` / CI so Vercel deploys don't need mkcert or a certs/ dir, and
-    // skipped for `vite preview` — Playwright serves the production build over plain HTTP and
-    // CI has no local CA to install.
-    command === "serve" &&
-      !isPreview &&
+    // Trusted certs for glific.test, so https://glific.test:5173 is accepted by Phoenix
+    // check_origin (*.glific.test).
+    isDevServer(command, isPreview) &&
       mkcert({
         hosts: ["glific.test"],
         savePath: path.resolve(dirname, "certs"),
