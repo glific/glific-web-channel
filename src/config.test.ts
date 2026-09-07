@@ -6,8 +6,19 @@ describe('deriveApiBase', () => {
   // One build serves every NGO, so the backend has to come from where the page is served —
   // anything inlined at build time would pin the bundle to a single organisation.
   it('maps an org web host onto that org backend', () => {
-    expect(deriveApiBase('web.reapbenefit.glific.com')).toBe('https://reapbenefit.glific.com/api');
-    expect(deriveApiBase('web.another-ngo.glific.com')).toBe('https://another-ngo.glific.com/api');
+    expect(deriveApiBase('web.staging.glific.com')).toBe('https://api.staging.glific.com/api');
+    expect(deriveApiBase('web.another-ngo.glific.com')).toBe('https://api.another-ngo.glific.com/api');
+  });
+
+  // Without the api. prefix this resolves to the staff console, a static site that answers any
+  // path with index.html and no CORS headers — which surfaces as a CORS error rather than as the
+  // wrong host. The previous test asserted the tech design's mapping rather than a reachable
+  // host, so it passed while the widget could not talk to staging at all.
+  it('targets the api host, not the console host', () => {
+    const base = deriveApiBase('web.staging.glific.com');
+
+    expect(base).toContain('//api.');
+    expect(base).not.toBe('https://staging.glific.com/api');
   });
 
   it('gives two orgs two different backends from the same build', () => {
