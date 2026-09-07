@@ -31,7 +31,6 @@ describe('deriveBackendOrigin', () => {
     expect(deriveBackendOrigin('localhost', 'http:')).toBeNull();
   });
 
-  it('requires the first label to be exactly "web"', () => {
   // Without the api. prefix this lands on the staff console, a static site that answers every
   // path with index.html and no CORS headers — which reads as a CORS failure, not a wrong host.
   it('targets the api host, not the staff console', () => {
@@ -41,6 +40,7 @@ describe('deriveBackendOrigin', () => {
     expect(origin).not.toBe('https://staging.glific.com');
   });
 
+  it('requires the first label to be exactly "web"', () => {
     // A prefix match would turn webhooks.glific.com into api.glific.com.
     expect(deriveBackendOrigin('webhooks.glific.com', 'https:')).toBeNull();
     expect(deriveBackendOrigin('website.glific.com', 'https:')).toBeNull();
