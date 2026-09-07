@@ -3,11 +3,21 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import axios from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { ORGANIZATION_NAME, WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
+import { WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
 import { Login } from './Login';
 
 vi.mock('axios');
 const mockedAxios = axios as any;
+
+// The theme is resolved in main.tsx before the first render, so components read it
+// synchronously. Stub the store rather than the fetch.
+vi.mock('@/services/branding', () => ({
+  getBranding: () => ({
+    theme: 'violet',
+    logo_url: 'https://cdn.example.org/logo.svg',
+    display_name: 'Test NGO',
+  }),
+}));
 
 const renderLogin = () =>
   render(
@@ -16,7 +26,7 @@ const renderLogin = () =>
         <Route path="/login" element={<Login />} />
         <Route path="/chat" element={<div>Chat Window</div>} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
 describe('<Login />', () => {
@@ -24,11 +34,10 @@ describe('<Login />', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mockedAxios.post.mockImplementation((url: string) => {
-      if (url === ORGANIZATION_NAME) {
-        return Promise.resolve({ data: { data: { name: 'Test NGO', status: 'active' } } });
-      }
       if (url === WEB_CHANNEL_REQUEST_OTP) {
-        return Promise.resolve({ data: { data: { phone: '919999999999', message: 'sent' } } });
+        return Promise.resolve({
+          data: { data: { phone: '919999999999', message: 'sent' } },
+        });
       }
       if (url === WEB_CHANNEL_VERIFY_OTP) {
         return Promise.resolve({
@@ -39,11 +48,12 @@ describe('<Login />', () => {
     });
   });
 
-  it('renders the phone step with the NGO name and "powered by Glific" branding', async () => {
+  it('renders the phone step with the NGO logo, name and "powered by Glific" branding', async () => {
     const { container } = renderLogin();
 
     // branding
     await waitFor(() => expect(screen.getByText('Test NGO')).toBeInTheDocument());
+    expect(screen.getByTestId('orgLogo')).toHaveAttribute('src', 'https://cdn.example.org/logo.svg');
     expect(screen.getByText('powered by Glific')).toBeInTheDocument();
 
     // phone step is shown
@@ -63,7 +73,9 @@ describe('<Login />', () => {
 
     // request-otp was called
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '919999999999' })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, {
+        phone: '919999999999',
+      }),
     );
 
     // Step 2: OTP field appears
@@ -74,13 +86,20 @@ describe('<Login />', () => {
 
     // verify-otp called and navigation to chat happened
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_VERIFY_OTP, { phone: '919999999999', otp: '9999' })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_VERIFY_OTP, {
+        phone: '919999999999',
+        otp: '9999',
+      }),
     );
     await waitFor(() => expect(screen.getByText('Chat Window')).toBeInTheDocument());
 
     // session stored under the dedicated key
     const stored = JSON.parse(localStorage.getItem('web_channel_session') as string);
-    expect(stored).toEqual({ token: 'jwt-token', contactId: 77, name: 'Alice' });
+    expect(stored).toEqual({
+      token: 'jwt-token',
+      contactId: 77,
+      name: 'Alice',
+    });
   });
 
   it('shows an inline "Invalid OTP" error on a 401', async () => {

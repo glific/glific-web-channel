@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import axios from 'axios';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { ORGANIZATION_NAME } from '@/config';
+import { Logo } from '@/components/branding/Logo';
+import { getBranding } from '@/services/branding';
 import { requestOtp, verifyOtp, setWebChannelSession } from '@/services/webChannelAuth';
 
 const phoneSchema = z.object({
@@ -26,22 +26,11 @@ export const Login = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
-  const [orgName, setOrgName] = useState('Glific');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const phoneForm = useForm<PhoneValues>({ resolver: zodResolver(phoneSchema), defaultValues: { phone: '' } });
   const otpForm = useForm<OtpValues>({ resolver: zodResolver(otpSchema), defaultValues: { otp: '' } });
-
-  // fetch the NGO name for branding; keep the default "Glific" on failure
-  useEffect(() => {
-    axios
-      .post(ORGANIZATION_NAME)
-      .then(({ data }) => {
-        if (data?.data?.name) setOrgName(data.data.name);
-      })
-      .catch(() => {});
-  }, []);
 
   const onPhoneSubmit = (values: PhoneValues) => {
     setError('');
@@ -72,7 +61,8 @@ export const Login = () => {
     <div className="flex min-h-[100svh] items-center justify-center bg-muted/30 p-4" data-testid="webChannelLogin">
       <Card className="w-full max-w-sm gap-6 p-6">
         <div className="flex flex-col items-center gap-1 text-center">
-          <div className="text-xl font-semibold">{orgName}</div>
+          <Logo size={80} className="mb-2" />
+          <div className="text-xl font-semibold">{getBranding().display_name}</div>
           <div className="text-xs text-muted-foreground">powered by Glific</div>
         </div>
 

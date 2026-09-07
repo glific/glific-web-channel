@@ -11,14 +11,17 @@ import mkcert from "vite-plugin-mkcert";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, isPreview }) => ({
   plugins: [
     react(),
     tailwindcss(),
     // Dev-only: mkcert installs a local CA and generates trusted certs for glific.test.
     // Origin https://glific.test:5173 is accepted by Phoenix check_origin (*.glific.test).
-    // Skipped for `vite build` / CI so Vercel deploys don't need mkcert or a certs/ dir.
+    // Skipped for `vite build` / CI so Vercel deploys don't need mkcert or a certs/ dir, and
+    // skipped for `vite preview` — Playwright serves the production build over plain HTTP and
+    // CI has no local CA to install.
     command === "serve" &&
+      !isPreview &&
       mkcert({
         hosts: ["glific.test"],
         savePath: path.resolve(dirname, "certs"),
@@ -49,6 +52,8 @@ export default defineConfig(({ command }) => ({
     },
   },
   test: {
+    // Vitest's default include also matches e2e/*.spec.ts; those are Playwright's.
+    exclude: ["e2e/**", "node_modules/**", "dist/**"],
     environment: "jsdom",
     globals: true,
     setupFiles: "./src/test/setup.ts",

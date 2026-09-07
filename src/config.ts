@@ -1,20 +1,31 @@
 // Backend endpoints for the public web-channel end-user app.
 //
-// Dev: leave the VITE_* vars unset — the app uses same-origin relative paths
-// (`/api`, `/web_socket`) which the Vite dev proxy (vite.config.ts) forwards to the
-// Glific backend on localhost:4000. This avoids CORS and lets the phoenix Socket
-// resolve "/web_socket" against the dev server.
-//
-// Prod: set VITE_GLIFIC_API_URL to the backend origin + "/api"
-// (e.g. https://api.<org>.glific.com/api) and VITE_WEB_SOCKET to the ws(s) endpoint.
-const API_BASE: string = import.meta.env.VITE_GLIFIC_API_URL || '/api';
+// One build serves every NGO, so nothing org-specific may be inlined at build time — Vite
+// substitutes VITE_* into the bundle, and a baked-in host would silently pin this build to one
+// organisation. The backend resolves the org from the request Host, so the API host is derived
+// from where the page is being served instead.
+
+/**
+ * Map the page's hostname onto the backend serving that org.
+ *
+ *   web.<shortcode>.glific.com  ->  https://<shortcode>.glific.com/api
+ *
+ * Anything else — localhost, glific.test, a preview URL — falls back to a same-origin relative
+ * path, which the Vite dev proxy forwards to the local backend.
+ */
+export const deriveApiBase = (hostname: string): string =>
+  hostname.startsWith('web.') ? `https://${hostname.slice('web.'.length)}/api` : '/api';
+
+// The env var stays as an escape hatch for previews pointed at a fixed backend. It must never
+// hold an org-specific host in production: that is precisely what breaks the one-build model.
+const API_BASE: string = import.meta.env.VITE_GLIFIC_API_URL || deriveApiBase(window.location.hostname);
 
 // The phoenix JS client accepts a path-only endpoint and derives ws(s)://host from
 // window.location, so the relative default proxies transparently in dev.
 export const WEB_SOCKET: string = import.meta.env.VITE_WEB_SOCKET || '/web_socket';
 
-// NGO/org display name used for branding on the login screen (mirrors staff Auth).
-export const ORGANIZATION_NAME = `${API_BASE}/v1/session/name`;
+// Per-org branding: theme, logo and display name. Public — it renders before login.
+export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
 
 // Public OTP auth endpoints (prototype: server does not actually send an SMS).
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;

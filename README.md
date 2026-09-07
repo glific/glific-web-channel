@@ -40,6 +40,9 @@ the prototype is **9999**.
 | `yarn build` | Typecheck (`tsc -b`) + production build to `dist/` |
 | `yarn test` | Run the Vitest suite once |
 | `yarn test:watch` | Watch mode |
+| `yarn e2e` | Run the Playwright end-to-end suite against a production build |
+| `yarn e2e:ui` | Playwright's interactive UI mode |
+| `yarn e2e:report` | Open the last HTML report |
 | `yarn lint` | Lint (oxlint) |
 
 ## Configuration
@@ -51,6 +54,58 @@ paths + the Vite proxy handle everything. In **prod**, set (see `.env.example`):
 VITE_GLIFIC_API_URL=https://api.<org>.glific.com/api
 VITE_WEB_SOCKET=wss://api.<org>.glific.com/web_socket
 ```
+
+## Branding
+
+Branding is **per organisation and fetched at runtime** — one build serves every NGO. At boot
+the app calls `GET /api/v1/web_channel/branding`; the backend resolves the organisation from the
+request `Host`, so the client sends no organisation identifier. Admins set the values from
+Glific's Settings page under **Web Channel**, and a change takes effect on reload with no
+redeploy.
+
+| Value | Where it lands |
+|---|---|
+| Theme (a named palette) | `--primary` and its matched `--primary-foreground` |
+| Logo URL (`https` only) | Login card and chat header |
+| Display name | Login card and `document.title` |
+
+Three properties worth knowing before changing `src/services/branding.ts`:
+
+- **First paint is held** behind the fetch (`src/main.tsx`), so there is no flash of the default
+  palette.
+- **A failed fetch does not fall back.** `loadBranding` returns `ok` / `disabled` / `unavailable`:
+  a 404 renders the app with a "not enabled" banner, but an unreachable backend renders a
+  retryable error page. Quietly serving the default palette under an NGO's own domain would read
+  as the wrong organisation rather than as a failure.
+- **The foreground ships with the palette, never supplied by the org.** An organisation that
+  picked its own foreground could make its button text vanish; contrast is an accessibility
+  obligation, not a preference. `themes.test.ts` asserts every pair clears WCAG AA.
+- **Override the raw custom properties** (`--primary`), not the `--color-*` aliases — those are
+  compiled through Tailwind's `@theme inline` and cannot be set at runtime.
+
+## End-to-end tests
+
+Playwright, in `e2e/`, running against the **production build** via `vite preview` — not the dev
+server. `yarn e2e` builds nothing itself, so run `yarn build` first if `dist/` is stale.
+
+```bash
+yarn build && yarn e2e
+```
+
+**The convention: every ticket adds its own journeys here.** The harness landed with the first
+user-visible feature precisely so it never trails the features it is meant to guard — a ticket
+that changes user-visible behaviour is not done until `e2e/` covers it.
+
+Journeys are grouped one file per feature area, with shared fixtures in `e2e/support/`. Backend
+responses are stubbed with `page.route`, which is what lets a single build be exercised as two
+different organisations without standing up two backends.
+
+Journeys run on **Pixel 7, iPhone 14, iPhone SE and Desktop Chrome** — beneficiaries reach this
+on a phone, often a shared or borrowed one, so mobile is the primary target rather than an
+afterthought.
+
+CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → `vitest run` → production
+build → `playwright test` on every push and pull request.
 
 ## Deploy on Vercel
 
@@ -81,18 +136,22 @@ src/
   services/
     webChannelSocket.ts      # phoenix socket: join, send, load-more, rename
     webChannelAuth.ts        # OTP request/verify + localStorage session
+    branding.ts              # per-org branding: fetch, apply, module store
+    themes.ts                # the named colour palettes
   routes/
     Login.tsx                # phone -> OTP (react-hook-form + zod)
     Chat.tsx                 # conversation: realtime, optimistic send, reverse-infinite scroll
   components/
     chat/MessageBubble.tsx   # WhatsApp-style bubble
     chat/EditName.tsx        # inline contact rename
+    branding/Logo.tsx        # the org's logo, or nothing when unset
     ui/                      # shadcn components (owned in-repo)
   lib/
     whatsapp.tsx             # safe WhatsApp-markup -> JSX + time formatting
     utils.ts                 # shadcn cn()
   App.tsx                    # routes (/login, /chat)
-  main.tsx                   # BrowserRouter entry
+  main.tsx                   # resolves branding, then mounts BrowserRouter
+e2e/                         # Playwright journeys (see "End-to-end tests")
 ```
 
 ## Roadmap
