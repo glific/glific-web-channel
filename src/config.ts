@@ -8,13 +8,18 @@
 /**
  * Map the page's hostname onto the backend serving that org.
  *
- *   web.<shortcode>.glific.com  ->  https://<shortcode>.glific.com/api
+ *   web.<shortcode>.glific.com  ->  https://api.<shortcode>.glific.com/api
+ *
+ * The `api.` prefix matters: `<shortcode>.glific.com` serves the staff console, a static site
+ * that answers any path with index.html and no CORS headers — so pointing here without it looks
+ * like a CORS failure when the request is simply going to the wrong server. SubdomainPlug strips
+ * `api.` when resolving the org, so both hosts resolve to the same organisation.
  *
  * Anything else — localhost, glific.test, a preview URL — falls back to a same-origin relative
  * path, which the Vite dev proxy forwards to the local backend.
  */
 export const deriveApiBase = (hostname: string): string =>
-  hostname.startsWith('web.') ? `https://${hostname.slice('web.'.length)}/api` : '/api';
+  hostname.startsWith('web.') ? `https://api.${hostname.slice('web.'.length)}/api` : '/api';
 
 // The env var stays as an escape hatch for previews pointed at a fixed backend. It must never
 // hold an org-specific host in production: that is precisely what breaks the one-build model.
