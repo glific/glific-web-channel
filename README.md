@@ -29,8 +29,8 @@ The dev server runs on **https://glific.test:5173** — add `127.0.0.1 glific.te
 local CA. Generated certs are saved under `certs/` (gitignored).
 
 The dev server proxies `/api` and `/web_socket` to the Glific backend on
-`https://localhost:4001` (see `vite.config.ts`). Start the backend first. The login OTP in
-the prototype is **9999**.
+`https://localhost:4001` (see `vite.config.ts`). Start the backend first. There is no
+bypass code — the backend mints a real OTP and delivers it over WhatsApp.
 
 ### Scripts
 
@@ -41,6 +41,7 @@ the prototype is **9999**.
 | `yarn test` | Run the Vitest suite once |
 | `yarn test:watch` | Watch mode |
 | `yarn e2e` | Run the Playwright end-to-end suite against a production build |
+| `yarn e2e:live` | Run the opt-in journeys against a real backend (see below) |
 | `yarn e2e:ui` | Playwright's interactive UI mode |
 | `yarn e2e:report` | Open the last HTML report |
 | `yarn lint` | Lint (oxlint) |
@@ -106,6 +107,46 @@ afterthought.
 
 CI (`.github/workflows/ci.yml`) runs install → typecheck → lint → `vitest run` → production
 build → `playwright test` on every push and pull request.
+
+### Against a real backend
+
+`e2e/live/` holds one journey that runs with **nothing stubbed**: a real request to
+`/api/v1/web_channel/request-otp`, a code minted by `Glific.OTP`, a real message row, a real
+signed token. It is opt-in and excluded from CI, which has neither Postgres nor Phoenix.
+
+```bash
+yarn e2e:live
+```
+
+The code cannot be read from the API — `PasswordlessAuth` keeps it in the backend's memory and
+there is deliberately no route that hands it back. Both send paths compose it into `messages.body`
+before the message reaches Gupshup, so the test reads it from there. That keeps every server-side
+step real without a test-only door into production code.
+
+The one hop it does **not** cover is Gupshup handing the message to WhatsApp: that needs a real
+handset and a human reading it, so it stays a manual acceptance check.
+
+Preconditions, all on the org the backend resolves from the request host:
+
+| | |
+|---|---|
+| Backend | running on `https://localhost:4001` |
+| `web_channel_enabled` | on for the organisation |
+| Database | reachable at `E2E_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5432/glific_dev`) |
+
+The suite seeds its own contacts. It has to: glific#5710 creates contacts with no consent and no
+session, so a number typed into the login box for the first time is deliberately sent nothing at
+all until #5713 adds the exemption.
+
+| Variable | Default |
+|---|---|
+| `E2E_DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/glific_dev` |
+| `E2E_ORGANIZATION_ID` | `1` |
+| `E2E_LIVE_URL` | `https://glific.test:5173` |
+| `E2E_PHONE` / `E2E_PHONE_ALT` | `919999900001` / `919999900002` |
+
+Runs are serial with retries off, because the backend throttles a phone to one OTP per 30 seconds
+and a retry would fail on the throttle rather than on whatever went wrong.
 
 ## Deploy on Vercel
 
