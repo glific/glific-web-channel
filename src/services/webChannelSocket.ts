@@ -1,6 +1,7 @@
 import { Socket, Channel } from 'phoenix';
 
 import { WEB_SOCKET } from '@/config';
+import { getWebChannelToken } from '@/services/webChannelAuth';
 
 export interface WebChannelMessage {
   id: number | string;
@@ -38,7 +39,10 @@ export interface WebChannelConnection {
 // Open the phoenix socket, join the contact's channel and resolve with the initial messages.
 // The phoenix client provides auto-reconnect + heartbeats out of the box.
 export const connectAndJoin = ({ token, contactId, handlers = {} }: ConnectParams): Promise<WebChannelConnection> => {
-  const socket = new Socket(WEB_SOCKET, { params: { token } });
+  // A function, not a value: phoenix re-evaluates params on every connect attempt. A captured
+  // token would make any auto-reconnect after a renewal retry forever with the replaced one,
+  // surfacing as a permanent "Reconnecting…" rather than an auth failure.
+  const socket = new Socket(WEB_SOCKET, { params: () => ({ token: getWebChannelToken() ?? token }) });
 
   if (handlers.onOpen) socket.onOpen(handlers.onOpen);
   if (handlers.onError) socket.onError(handlers.onError);

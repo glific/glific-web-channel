@@ -45,7 +45,7 @@ jobs:
       # The e2e suite runs `vite preview` against dist/, so it exercises the build above
       # rather than the dev server.
       - name: Install Playwright browsers
-        run: yarn playwright install --with-deps chromium webkit
+        run: yarn playwright install --with-deps chromium firefox webkit
 
       - name: End-to-end tests
         run: yarn e2e

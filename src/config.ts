@@ -1,37 +1,53 @@
-// Backend endpoints for the public web-channel end-user app.
-//
-// One build serves every NGO, so nothing org-specific may be inlined at build time — Vite
-// substitutes VITE_* into the bundle, and a baked-in host would silently pin this build to one
-// organisation. The backend resolves the org from the request Host, so the API host is derived
-// from where the page is being served instead.
+// One build serves every organisation, so the backend origin cannot be a build-time constant:
+// web.tap.glific.com and web.staging.glific.com are the same bundle and must reach different APIs.
+// Vercel previews carry no organisation in their hostname and so must set the env vars explicitly;
+// local dev falls through to relative paths that the Vite proxy forwards.
+
+const API_PATH = '/api';
+const SOCKET_PATH = '/web_socket';
 
 /**
- * Map the page's hostname onto the backend serving that org.
- *
- *   web.<shortcode>.glific.com  ->  https://api.<shortcode>.glific.com/api
- *
- * The `api.` prefix matters: `<shortcode>.glific.com` serves the staff console, a static site
- * that answers any path with index.html and no CORS headers — so pointing here without it looks
- * like a CORS failure when the request is simply going to the wrong server. SubdomainPlug strips
- * `api.` when resolving the org, so both hosts resolve to the same organisation.
- *
- * Anything else — localhost, glific.test, a preview URL — falls back to a same-origin relative
- * path, which the Vite dev proxy forwards to the local backend.
+ * The backend origin implied by a web-channel hostname, or null when the hostname says nothing
+ * about which backend to use. Exported so tests can exercise more than one hostname; the constants
+ * below resolve once at module load.
  */
-export const deriveApiBase = (hostname: string): string =>
-  hostname.startsWith('web.') ? `https://api.${hostname.slice('web.'.length)}/api` : '/api';
+export const deriveBackendOrigin = (hostname: string, protocol: string): string | null => {
+  const labels = hostname.split('.');
 
-// The env var stays as an escape hatch for previews pointed at a fixed backend. It must never
-// hold an org-specific host in production: that is precisely what breaks the one-build model.
-const API_BASE: string = import.meta.env.VITE_GLIFIC_API_URL || deriveApiBase(window.location.hostname);
+  // Exactly "web", or webhooks.glific.com would resolve to api.glific.com. Three labels minimum,
+  // or a bare "web.test" would resolve to a nonexistent "api.test".
+  if (labels[0] !== 'web' || labels.length < 3) return null;
 
-// The phoenix JS client accepts a path-only endpoint and derives ws(s)://host from
-// window.location, so the relative default proxies transparently in dev.
-export const WEB_SOCKET: string = import.meta.env.VITE_WEB_SOCKET || '/web_socket';
+  return `${protocol}//${['api', ...labels.slice(1)].join('.')}`;
+};
 
-// Per-org branding: theme, logo and display name. Public — it renders before login.
+const derivedOrigin =
+  typeof window === 'undefined'
+    ? null
+    : deriveBackendOrigin(window.location.hostname, window.location.protocol);
+
+const derivedSocketOrigin = derivedOrigin?.replace(/^http/, 'ws') ?? null;
+
+const API_BASE: string =
+  import.meta.env.VITE_GLIFIC_API_URL || (derivedOrigin ? `${derivedOrigin}${API_PATH}` : API_PATH);
+
+// A path-only endpoint makes the phoenix client derive ws(s)://host from window.location, which is
+// only correct same-origin — so a derived backend needs the full URL.
+export const WEB_SOCKET: string =
+  import.meta.env.VITE_WEB_SOCKET ||
+  (derivedSocketOrigin ? `${derivedSocketOrigin}${SOCKET_PATH}` : SOCKET_PATH);
+
 export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
 
-// Public OTP auth endpoints (prototype: server does not actually send an SMS).
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;
 export const WEB_CHANNEL_VERIFY_OTP = `${API_BASE}/v1/web_channel/verify-otp`;
+export const WEB_CHANNEL_RENEW_TOKEN = `${API_BASE}/v1/web_channel/renew-token`;
+
+// Must not undercut the backend's per-IP throttle (`:web_channel_otp_rate_limit`, 1 per 30s), or
+// the countdown just walks the user into a 429.
+export const WEB_CHANNEL_OTP_RESEND_SECONDS = 30;
+
+// Ten minutes of a one-hour token: wide enough that a tab asleep through most of the window still
+// has time to renew on wake, and that a transient failure gets ~20 retries.
+export const WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS = 10 * 60;
+export const WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS = 30_000;
