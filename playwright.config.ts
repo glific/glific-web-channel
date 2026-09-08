@@ -10,10 +10,18 @@ const CI = !!process.env.CI;
 const LIVE = !!process.env.E2E_LIVE;
 const LIVE_URL = process.env.E2E_LIVE_URL ?? 'https://glific.test:5173';
 
+// Two Samsungs rather than a Pixel: they are what this audience actually holds, and the pair
+// brackets the range — an S8 is the small, old, still-common end and an S24 the current one.
+//
+// Firefox takes the descriptor's user agent and viewport but ignores `isMobile` and `hasTouch`
+// (maxTouchPoints reads 0), so this project is Gecko at a phone-sized viewport rather than a
+// phone. It earns its place on layout and CSS, not on touch behaviour.
 const stubbedProjects = [
-  { name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
+  { name: 'mobile-chrome', use: { ...devices['Galaxy S8'] } },
+  { name: 'mobile-chrome-modern', use: { ...devices['Galaxy S24'] } },
   { name: 'mobile-safari', use: { ...devices['iPhone 14'] } },
   { name: 'mobile-safari-small', use: { ...devices['iPhone SE'] } },
+  { name: 'mobile-firefox', use: { ...devices['Galaxy S8'], defaultBrowserType: 'firefox' as const } },
   { name: 'desktop-chrome', use: { ...devices['Desktop Chrome'] } },
 ].map((project) => ({ ...project, testIgnore: /live\// }));
 
@@ -38,10 +46,9 @@ export default defineConfig({
   },
 
   // Beneficiaries reach this on a phone — often a shared or borrowed one — so mobile is the
-  // primary target, not an afterthought. Chrome on Android and Safari on iOS together cover
-  // the large majority of mobile browser use; desktop Chrome stays for staff-side debugging.
+  // primary target, not an afterthought. Desktop Chrome stays for staff-side debugging.
   projects: LIVE
-    ? [{ name: 'live-backend', testMatch: /live\/.*\.spec\.ts/, use: { ...devices['Pixel 7'] } }]
+    ? [{ name: 'live-backend', testMatch: /live\/.*\.spec\.ts/, use: { ...devices['Galaxy S8'] } }]
     : stubbedProjects,
 
   // The production build, not the dev server — theming runs before first paint and the dev
