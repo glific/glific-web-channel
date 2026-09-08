@@ -1,13 +1,15 @@
 import { expect, test } from '@playwright/test';
 
-import { latestMessageId, readOtpSentTo, seedMessageableContact } from './support/backend';
+import { closeBackend, latestMessageId, readOtpSentTo, seedMessageableContact } from './support/glific';
 import { storedSession, submitOtp, submitPhone } from '../support/auth';
 
 /**
  * The OTP journey against a real Glific backend — nothing stubbed.
  *
- * Opt-in (`yarn e2e:live`) and excluded from CI, which has neither Postgres nor Phoenix. See the
- * README for the preconditions; `readOtpSentTo` explains what to check when a run finds no code.
+ * Opt-in (`yarn e2e:live`) and excluded from CI, which has no backend to talk to. Seeding and
+ * reading both go through the staff GraphQL API rather than the database, so the suite touches
+ * nothing an operator could not. See the README for the preconditions; `readOtpSentTo` explains
+ * what to check when a run finds no code.
  *
  * The one hop this does not exercise is the last one: Gupshup handing the message to WhatsApp.
  * That needs a real handset and a human reading it, so it stays a manual acceptance check rather
@@ -18,6 +20,10 @@ import { storedSession, submitOtp, submitPhone } from '../support/auth';
 // number between tests would make them fail in whatever order they happened to run.
 const SIGN_IN_PHONE = process.env.E2E_PHONE ?? '919999900001';
 const WRONG_CODE_PHONE = process.env.E2E_PHONE_ALT ?? '919999900002';
+
+test.afterAll(async () => {
+  await closeBackend();
+});
 
 test.describe('signing in against a real backend', () => {
   test.beforeEach(async ({ page }) => {
@@ -36,7 +42,7 @@ test.describe('signing in against a real backend', () => {
 
   test('a beneficiary receives a real code and signs in with it', async ({ page }) => {
     await seedMessageableContact(SIGN_IN_PHONE);
-    const watermark = await latestMessageId();
+    const watermark = await latestMessageId(SIGN_IN_PHONE);
 
     await submitPhone(page, SIGN_IN_PHONE);
     await expect(page.getByLabel('Enter the OTP')).toBeVisible();

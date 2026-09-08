@@ -118,10 +118,11 @@ signed token. It is opt-in and excluded from CI, which has neither Postgres nor 
 yarn e2e:live
 ```
 
-The code cannot be read from the API — `PasswordlessAuth` keeps it in the backend's memory and
-there is deliberately no route that hands it back. Both send paths compose it into `messages.body`
-before the message reaches Gupshup, so the test reads it from there. That keeps every server-side
-step real without a test-only door into production code.
+The code is never persisted on its own — `PasswordlessAuth` keeps it in the backend's memory and
+there is deliberately no route that hands it back. But both send paths compose it into the message
+body before the message reaches Gupshup, and a staff user can read that message. So the suite signs
+in as staff and reads it over the same GraphQL API the console uses: no database access, nothing an
+operator could not see, and no test-only door into production code.
 
 The one hop it does **not** cover is Gupshup handing the message to WhatsApp: that needs a real
 handset and a human reading it, so it stays a manual acceptance check.
@@ -132,7 +133,7 @@ Preconditions, all on the org the backend resolves from the request host:
 |---|---|
 | Backend | running on `https://localhost:4001` |
 | `web_channel_enabled` | on for the organisation |
-| Database | reachable at `E2E_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5432/glific_dev`) |
+| Staff user | phone + password with at least **manager** access, for seeding and reading |
 
 The suite seeds its own contacts. It has to: glific#5710 creates contacts with no consent and no
 session, so a number typed into the login box for the first time is deliberately sent nothing at
@@ -140,10 +141,23 @@ all until #5713 adds the exemption.
 
 | Variable | Default |
 |---|---|
-| `E2E_DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/glific_dev` |
-| `E2E_ORGANIZATION_ID` | `1` |
+| `E2E_STAFF_PHONE` | **required** |
+| `E2E_STAFF_PASSWORD` | **required** |
+| `E2E_BACKEND_URL` | `https://localhost:4001` |
 | `E2E_LIVE_URL` | `https://glific.test:5173` |
 | `E2E_PHONE` / `E2E_PHONE_ALT` | `919999900001` / `919999900002` |
+
+The staff credentials have no defaults on purpose: a wrong guess surfaces as a 401 midway through a
+journey, which reads as the feature being broken rather than the harness being unconfigured. To set
+a password on a seeded dev user:
+
+```bash
+mix run -e '
+  Glific.Repo.put_organization_id(1)
+  Glific.Users.get_user_by(%{phone: "917834811114"})
+  |> Glific.Users.update_user(%{password: "Secret12345678!", confirm_password: "Secret12345678!"})
+'
+```
 
 Runs are serial with retries off, because the backend throttles a phone to one OTP per 30 seconds
 and a retry would fail on the throttle rather than on whatever went wrong.
