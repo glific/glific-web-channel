@@ -67,5 +67,9 @@ export default defineConfig(({ command, isPreview }) => ({
     globals: true,
     setupFiles: "./src/test/setup.ts",
     css: false,
+    // Scoped to src/ because Claude Code keeps git worktrees under .claude/, and vitest's default
+    // glob picks up their copies of these same files — a stale branch's tests reported as this
+    // branch's results.
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
 }));

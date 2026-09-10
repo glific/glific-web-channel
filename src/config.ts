@@ -42,6 +42,7 @@ export const WEB_CHANNEL_BRANDING = `${API_BASE}/v1/web_channel/branding`;
 export const WEB_CHANNEL_REQUEST_OTP = `${API_BASE}/v1/web_channel/request-otp`;
 export const WEB_CHANNEL_VERIFY_OTP = `${API_BASE}/v1/web_channel/verify-otp`;
 export const WEB_CHANNEL_RENEW_TOKEN = `${API_BASE}/v1/web_channel/renew-token`;
+export const WEB_CHANNEL_UPLOAD = `${API_BASE}/v1/web_channel/upload-url`;
 
 // Must not undercut the backend's per-IP throttle (`:web_channel_otp_rate_limit`, 1 per 30s), or
 // the countdown just walks the user into a 429.
@@ -51,3 +52,9 @@ export const WEB_CHANNEL_OTP_RESEND_SECONDS = 30;
 // has time to renew on wake, and that a transient failure gets ~20 retries.
 export const WEB_CHANNEL_TOKEN_REFRESH_THRESHOLD_SECONDS = 10 * 60;
 export const WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS = 30_000;
+
+// The channel only learns of a renewal from this push, and the server warns once per token, so a
+// dropped push has nothing else behind it. Three tries 5s apart stay well inside the backend's
+// 600s warning window and its 60s grace after expiry.
+export const WEB_CHANNEL_RENEW_PUSH_ATTEMPTS = 3;
+export const WEB_CHANNEL_RENEW_PUSH_RETRY_MS = 5_000;
