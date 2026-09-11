@@ -6,6 +6,7 @@ import { WebChannelDisabledBanner } from '@/components/branding/WebChannelDisabl
 import { useSessionRefresh } from '@/hooks/useSessionRefresh';
 import { Login } from '@/routes/Login';
 import { Chat } from '@/routes/Chat';
+import { About } from '@/routes/About';
 
 // The guards are COMPONENTS so the token is read when <Routes> renders them. Computing it once in
 // App's body would leave it stale on navigation, trapping the user on /login after a successful
@@ -48,6 +49,14 @@ export const App = () => (
         element={
           <RequireAuth>
             <Chat />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/about"
+        element={
+          <RequireAuth>
+            <About />
           </RequireAuth>
         }
       />

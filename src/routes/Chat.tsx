@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Mic, Paperclip, Send, Trash2, X } from 'lucide-react';
+import { MapPin, Mic, MoreVertical, Paperclip, Send, Trash2, X } from 'lucide-react';
 import type { Channel, Socket } from 'phoenix';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { ChatMenu } from '@/components/chat/ChatMenu';
 import { Logo } from '@/components/branding/Logo';
+import { getBranding } from '@/services/branding';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useLocationShare, type SharedLocation } from '@/hooks/useLocationShare';
 import { useMediaSend } from '@/hooks/useMediaSend';
@@ -23,6 +25,14 @@ import { clearWebChannelSession, getWebChannelContact, getWebChannelToken } from
 
 const PAGE_SIZE = 100;
 
+// What the header says under the org's name. The contact is chatting WITH the organisation, so
+// the presence shown is the channel's, not their own.
+const CONNECTION_LABELS: Record<string, string> = {
+  connecting: 'connecting…',
+  open: 'online',
+  reconnecting: 'reconnecting…',
+};
+
 const STATUS_LABELS: Record<string, string> = {
   uploading: 'Uploading…',
   sending: 'Sending…',
@@ -35,12 +45,14 @@ export const Chat = () => {
   const navigate = useNavigate();
   const contact = getWebChannelContact();
   const token = getWebChannelToken();
+  const branding = getBranding();
 
   const [messages, setMessages] = useState<WebChannelMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [connectionState, setConnectionState] = useState<'connecting' | 'open' | 'reconnecting'>('connecting');
   const [loadingMore, setLoadingMore] = useState(false);
   const [reachedStart, setReachedStart] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const channelRef = useRef<Channel | null>(null);
@@ -219,24 +231,36 @@ export const Chat = () => {
 
   return (
     <div className="mx-auto flex h-[100svh] w-full max-w-2xl flex-col bg-background" data-testid="webChannelChat">
-      <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Logo size={36} />
-          <span className="min-w-0 truncate font-medium" data-testid="contactName">
-            {contact?.name || 'You'}
-          </span>
+      <header className="flex items-center gap-3 bg-primary px-4 py-3 text-primary-foreground">
+        <Logo size={44} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-bold" data-testid="orgName">
+            {branding.display_name}
+          </div>
+          <div className="text-xs text-primary-foreground/75" data-testid="connectionStatus">
+            {CONNECTION_LABELS[connectionState]}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {connectionState !== 'open' && (
-            <span className="text-xs text-muted-foreground" data-testid="connectionStatus">
-              {connectionState === 'connecting' ? 'Connecting…' : 'Reconnecting…'}
-            </span>
-          )}
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            Logout
-          </Button>
-        </div>
+        <button
+          type="button"
+          aria-label="Menu"
+          data-testid="chatMenuButton"
+          onClick={() => setMenuOpen(true)}
+          className="rounded-full p-1.5 hover:bg-white/10"
+        >
+          <MoreVertical className="size-5" />
+        </button>
       </header>
+
+      <ChatMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        orgName={branding.display_name}
+        contactName={contact?.name}
+        contactPhone={contact?.phone}
+        onAbout={() => navigate('/about')}
+        onLogout={handleLogout}
+      />
 
       <div
         className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4"

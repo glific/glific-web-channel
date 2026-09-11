@@ -70,15 +70,17 @@ const InteractiveContent = ({
       {content.type === 'list' && content.title && <span className="font-semibold">{content.title}</span>}
       {text && <span className="whitespace-pre-wrap">{whatsappToJsx(text)}</span>}
       {options.length > 0 && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {options.map((option) => (
+            // Bordered in the org's decorative colour, never filled with it: it is chosen for looks
+            // and nothing guarantees a label stays legible on top.
             <button
               key={option.title}
               type="button"
               data-testid="interactiveOption"
               disabled={!onSelectOption}
               onClick={() => onSelectOption?.(option.title as string)}
-              className="rounded-lg border px-3 py-1.5 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-full border-2 border-brand-accent px-4 py-2 text-left text-sm font-semibold hover:bg-brand-accent/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="block">{option.title}</span>
               {option.description && (

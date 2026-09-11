@@ -71,10 +71,10 @@ export const useSessionRefresh = (): void => {
       refreshing.current = true;
       renewToken(token)
         .then(({ data }) => {
-          const { token: renewed, contact_id: contactId, name } = data?.data ?? {};
+          const { token: renewed, contact_id: contactId, name, phone } = data?.data ?? {};
           if (!renewed) return;
 
-          setWebChannelSession({ token: renewed, contactId, name });
+          setWebChannelSession({ token: renewed, contactId, name, phone });
           handOverToChannel(renewed);
         })
         .catch((error) => {

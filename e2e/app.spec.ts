@@ -62,6 +62,6 @@ test.describe('the widget loads', () => {
     await page.getByTestId('brandingRetry').click();
 
     await expect(page.getByTestId('webChannelLogin')).toBeVisible();
-    await expect(page.getByText(DARK_ACCENT_ORG.display_name)).toBeVisible();
+    await expect(page.getByTestId('orgName')).toHaveText(DARK_ACCENT_ORG.display_name);
   });
 });
