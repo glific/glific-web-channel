@@ -77,13 +77,12 @@ describe('<Login />', () => {
     vi.useRealTimers();
   });
 
-  it('opens with the org hero, the trust pill and the phone step', async () => {
+  it('opens with the org hero and the phone step', async () => {
     renderLogin();
 
     await waitFor(() => expect(screen.getByTestId('orgName')).toHaveTextContent('Test NGO'));
     expect(screen.getByTestId('orgLogo')).toHaveAttribute('src', BRANDING.logo_url);
     expect(screen.getByTestId('orgCaption')).toHaveTextContent(BRANDING.about.description);
-    expect(screen.getByTestId('trustPill')).toBeInTheDocument();
     expect(screen.getByText('Enter your phone number to continue')).toBeInTheDocument();
     expect(screen.getByText('Powered by Glific')).toBeInTheDocument();
   });
@@ -463,13 +462,13 @@ describe('<Login />', () => {
     expect(screen.getByTestId('otpResend')).toHaveTextContent(`Resend in ${WEB_CHANNEL_OTP_RESEND_SECONDS}s`);
   });
 
-  it('offers the business profile before sign-in, where there is no chat to leave', async () => {
+  // The business profile lives behind sign-in, on the About screen. Signing in is the only thing
+  // this page is for, and the address and opening hours are not part of deciding to.
+  it('keeps the business profile off the sign-in screen', async () => {
     renderLogin();
-    await waitFor(() => expect(screen.getByTestId('aboutToggle')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('phoneSubmit')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByTestId('aboutToggle'));
-
-    expect(screen.getByTestId('orgProfile')).toBeInTheDocument();
-    expect(screen.getByTestId('about-address')).toHaveTextContent('Mumbai, Maharashtra');
+    expect(screen.queryByTestId('aboutToggle')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('orgProfile')).not.toBeInTheDocument();
   });
 });

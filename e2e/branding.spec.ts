@@ -46,8 +46,8 @@ test.describe('per-org theming', () => {
   });
 
   // Whatever an org uploads — landscape wordmark, square mark, tall crest — the frame is the
-  // same circle, so two orgs' sign-in screens stay visually consistent.
-  test('the logo renders in a fixed circular frame whatever its aspect ratio', async ({ context }) => {
+  // same square, so two orgs' sign-in screens stay visually consistent.
+  test('the logo renders in a fixed square frame whatever its aspect ratio', async ({ context }) => {
     const wide = await context.newPage();
     await serveBranding(wide, DARK_ACCENT_ORG);
     await wide.route('https://cdn.example.org/**', (route) =>
@@ -62,8 +62,9 @@ test.describe('per-org theming', () => {
     const { width, height, radius } = await logoFrame(wide);
 
     expect(Math.round(width)).toBe(Math.round(height));
-    // A full circle — `rounded-full` resolves to a radius at least half the box.
-    expect(radius).toBeGreaterThanOrEqual(width / 2);
+    // Rounded, but nowhere near a circle — a circle would crop a wordmark to uselessness.
+    expect(radius).toBeGreaterThan(0);
+    expect(radius).toBeLessThan(width / 4);
     // Contained, not cropped — a 600x80 wordmark must not have its sides cut off.
     await expect(wide.getByTestId('orgLogo')).toHaveCSS('object-fit', 'contain');
   });
@@ -126,25 +127,15 @@ test.describe('per-org theming', () => {
     expect(await rootVar(page, '--primary')).not.toBe(UNTHEMED_PRIMARY);
   });
 
-  // The design promises the business profile is reachable before sign-in, where there is no chat
-  // to leave — so it is a disclosure here rather than the screen the chat menu opens.
-  test('the business profile is readable from the sign-in screen', async ({ page }) => {
+  // The business profile belongs behind sign-in, on the About screen the chat menu opens. The
+  // org's description still carries on the hero, which is what identifies the organisation.
+  test('keeps the business profile off the sign-in screen', async ({ page }) => {
     await serveBranding(page, DARK_ACCENT_ORG);
-    await page.goto('/login');
-
-    await page.getByTestId('aboutToggle').click();
-
-    await expect(page.getByTestId('orgProfile')).toBeVisible();
-    await expect(page.getByTestId('about-address')).toContainText(DARK_ACCENT_ORG.about.address!);
-    await expect(page.getByTestId('about-website')).toContainText('violet.example.org');
-  });
-
-  // An org that has published nothing must not offer an empty panel.
-  test('hides the business profile when the org has published nothing', async ({ page }) => {
-    await serveBranding(page, LIGHT_ACCENT_ORG);
     await page.goto('/login');
 
     await expect(page.getByTestId('phoneSubmit')).toBeVisible();
     await expect(page.getByTestId('aboutToggle')).toHaveCount(0);
+    await expect(page.getByTestId('orgProfile')).toHaveCount(0);
+    await expect(page.getByTestId('orgCaption')).toContainText(DARK_ACCENT_ORG.about.description!);
   });
 });

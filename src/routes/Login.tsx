@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ChevronDown, Lock } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { OrgHero } from '@/components/branding/OrgHero';
-import { OrgProfile } from '@/components/branding/OrgProfile';
 import { OtpInput } from '@/components/auth/OtpInput';
-import { getBranding, hasOrgProfile } from '@/services/branding';
+import { getBranding } from '@/services/branding';
 import { WEB_CHANNEL_OTP_RESEND_SECONDS } from '@/config';
 import { cn } from '@/lib/utils';
 import {
@@ -44,16 +43,6 @@ const otpSchema = z.object({
 
 type PhoneValues = z.infer<typeof phoneSchema>;
 type OtpValues = z.infer<typeof otpSchema>;
-
-const TrustPill = () => (
-  <div
-    className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
-    data-testid="trustPill"
-  >
-    <Lock className="size-3.5" aria-hidden="true" />
-    Secure sign-in · verified organisation
-  </div>
-);
 
 const Disclosure = ({ label, testId, children }: { label: string; testId: string; children: ReactNode }) => {
   const [open, setOpen] = useState(false);
@@ -205,8 +194,6 @@ export const Login = () => {
       <OrgHero />
 
       <main className="flex flex-1 flex-col gap-5 px-6 py-6">
-        <TrustPill />
-
         {step === 'phone' ? (
           <form className="flex flex-col gap-5" onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} noValidate>
             <h2 className="text-lg font-bold">Enter your phone number to continue</h2>
@@ -351,12 +338,6 @@ export const Login = () => {
               </p>
             )}
           </form>
-        )}
-
-        {hasOrgProfile(branding.about) && (
-          <Disclosure label={`About ${orgName}`} testId="aboutToggle">
-            <OrgProfile />
-          </Disclosure>
         )}
 
         <div className="flex-1" />
