@@ -127,6 +127,17 @@ test.describe('per-org theming', () => {
     expect(await rootVar(page, '--primary')).not.toBe(UNTHEMED_PRIMARY);
   });
 
+  // The widget is a standalone site on the org's own subdomain, so the Glific mark shipped in
+  // index.html must not survive into an NGO's tab.
+  test('the tab icon becomes the org logo, not the one in index.html', async ({ page }) => {
+    await serveBranding(page, DARK_ACCENT_ORG);
+    await page.goto('/login');
+    await expect(page.getByTestId('phoneSubmit')).toBeVisible();
+
+    const href = await page.locator('link[rel="icon"]').getAttribute('href');
+    expect(href).toBe(DARK_ACCENT_ORG.logo_url);
+  });
+
   // The business profile belongs behind sign-in, on the About screen the chat menu opens. The
   // org's description still carries on the hero, which is what identifies the organisation.
   test('keeps the business profile off the sign-in screen', async ({ page }) => {

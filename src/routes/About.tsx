@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { ChevronLeft, Check } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 
 import { OrgHero } from '@/components/branding/OrgHero';
 import { OrgProfile } from '@/components/branding/OrgProfile';
@@ -13,12 +13,10 @@ export const About = () => {
 
   return (
     <div className="mx-auto flex min-h-[100svh] w-full max-w-md flex-col bg-background" data-testid="webChannelAbout">
+      {/* No caption: the description belongs to the profile below, and repeating it in the band
+          above would say the same thing twice on the one screen that exists to show it. */}
       <OrgHero
-        subtitle={
-          <span className="inline-flex items-center gap-1">
-            <Check className="size-3.5" aria-hidden="true" /> Verified organisation
-          </span>
-        }
+        subtitle={null}
         leading={
           <button
             type="button"
@@ -42,8 +40,6 @@ export const About = () => {
         )}
 
         <div className="flex-1" />
-
-        <p className="py-4 text-center text-xs text-muted-foreground">Read-only · configured by {displayName}</p>
       </main>
     </div>
   );

@@ -7,8 +7,11 @@ import { getBranding } from '@/services/branding';
 interface OrgHeroProps {
   /** Rendered at the top-left of the band — a back control, when there is somewhere to go. */
   leading?: ReactNode;
-  /** Replaces the org's description under the name, for screens that say something else. */
-  subtitle?: ReactNode;
+  /**
+   * Replaces the org's description under the name. Pass `null` for a hero with no caption at
+   * all — omitting it is what falls back to the description.
+   */
+  subtitle?: ReactNode | null;
   logoSize?: number;
   className?: string;
 }
@@ -18,7 +21,7 @@ interface OrgHeroProps {
 // About reads as two different organisations.
 export const OrgHero = ({ leading, subtitle, logoSize = 96, className }: OrgHeroProps) => {
   const { display_name: displayName, about } = getBranding();
-  const caption = subtitle ?? about.description;
+  const caption = subtitle === undefined ? about.description : subtitle;
 
   return (
     <header

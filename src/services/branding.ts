@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 import { WEB_CHANNEL_BRANDING } from '@/config';
+import { initialsFor } from '@/lib/initials';
 
 /** The read-only business profile, the web equivalent of a WhatsApp business profile. */
 export interface OrgAbout {
@@ -60,10 +61,49 @@ export const isWebChannelEnabled = (): boolean => webChannelEnabled;
 /** Whether there is anything to show on the About screen at all. */
 export const hasOrgProfile = (about: OrgAbout): boolean => Object.values(about).some(Boolean);
 
+const escapeXml = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 /**
- * Write the org's colours onto :root and the document title.
+ * The org's monogram as an SVG data URI, for an org that has uploaded no logo.
  *
- * These override the *raw* custom properties. The `--color-*` aliases are compiled through
+ * Inverted against the mark the Logo component draws — the org's colour behind its foreground,
+ * rather than the white tile the hero's own background makes legible. A white tile is what the
+ * logo looks like, but in a browser tab it has no surround and disappears into the chrome.
+ */
+const monogramFavicon = ({ display_name: name, primary_color, primary_foreground }: Branding): string => {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
+    `<rect width="64" height="64" rx="12" fill="${escapeXml(primary_color)}"/>` +
+    `<text x="32" y="34" text-anchor="middle" dominant-baseline="central" ` +
+    `font-family="system-ui, sans-serif" font-size="30" font-weight="600" ` +
+    `fill="${escapeXml(primary_foreground)}">${escapeXml(initialsFor(name))}</text>` +
+    `</svg>`;
+
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+};
+
+/**
+ * Point the tab icon at the org's own logo.
+ *
+ * The widget is a standalone site on the organisation's own subdomain, so a Glific mark in the
+ * tab is a branding leak. `type` is dropped rather than updated because a logo can be a PNG, a
+ * JPEG or an SVG and the browser sniffs it correctly either way.
+ */
+const applyFavicon = (next: Branding): void => {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link');
+
+  link.rel = 'icon';
+  link.removeAttribute('type');
+  link.href = next.logo_url ?? monogramFavicon(next);
+
+  if (!link.parentNode) document.head.appendChild(link);
+};
+
+/**
+ * Write the org's colours onto :root, and its name and mark onto the tab.
+ *
+ * The colours override the *raw* custom properties. The `--color-*` aliases are compiled through
  * Tailwind's `@theme inline`, so setting those at runtime would have no effect.
  *
  * `--secondary` is left alone: in shadcn it is a surface colour with its own foreground, and
@@ -79,6 +119,7 @@ export const applyBranding = (next: Branding): void => {
   root.style.setProperty('--ring', next.primary_color);
 
   document.title = `${next.display_name} — Chat`;
+  applyFavicon(next);
 };
 
 export interface BrandingResult {

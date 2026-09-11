@@ -38,10 +38,17 @@ describe('<About />', () => {
     renderAbout();
 
     expect(screen.getByTestId('orgName')).toHaveTextContent('Test NGO');
-    expect(screen.getByTestId('orgCaption')).toHaveTextContent('Verified organisation');
     expect(screen.getByTestId('orgDescription')).toHaveTextContent('after-school programmes');
     expect(screen.getByTestId('about-address')).toHaveTextContent('Bengaluru, Karnataka');
     expect(screen.getByTestId('about-hours')).toHaveTextContent('Mon-Fri, 10am-6pm IST');
+  });
+
+  // The description is the profile's first line; a caption repeating it in the band above would
+  // say the same thing twice on the one screen that exists to show it.
+  it('leaves the caption off the hero, where the description already follows it', () => {
+    renderAbout();
+
+    expect(screen.queryByTestId('orgCaption')).not.toBeInTheDocument();
   });
 
   it('makes the website and the email reachable, not just readable', () => {

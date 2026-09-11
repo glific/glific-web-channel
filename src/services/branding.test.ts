@@ -21,6 +21,7 @@ const ORG = {
 describe('applyBranding', () => {
   beforeEach(() => {
     document.documentElement.removeAttribute('style');
+    document.querySelector('link[rel="icon"]')?.remove();
     document.title = '';
   });
 
@@ -54,6 +55,38 @@ describe('applyBranding', () => {
     applyBranding(ORG);
 
     expect(document.title).toBe('Example NGO — Chat');
+  });
+
+  // The widget is a standalone site on the org's own subdomain, so a Glific mark in the tab is a
+  // branding leak.
+  it('points the tab icon at the org logo', () => {
+    applyBranding(ORG);
+
+    const link = document.querySelector('link[rel="icon"]');
+    expect(link).toHaveAttribute('href', ORG.logo_url);
+    // A logo can be a PNG, a JPEG or an SVG; a stale type attribute would mislabel it.
+    expect(link).not.toHaveAttribute('type');
+  });
+
+  it('falls back to the org monogram when no logo has been uploaded', () => {
+    applyBranding({ ...ORG, logo_url: null });
+
+    const href = document.querySelector('link[rel="icon"]')!.getAttribute('href')!;
+    const svg = decodeURIComponent(href.replace('data:image/svg+xml,', ''));
+
+    // "Example NGO" is two words, so the monogram is one letter from each.
+    expect(svg).toContain('>en<');
+    // Inverted against the hero's white tile, which would vanish into the browser chrome.
+    expect(svg).toContain(`fill="${ORG.primary_color}"`);
+    expect(svg).toContain(`fill="${ORG.primary_foreground}"`);
+  });
+
+  it('escapes a display name that would otherwise break the monogram markup', () => {
+    applyBranding({ ...ORG, logo_url: null, display_name: '<script' });
+
+    const href = document.querySelector('link[rel="icon"]')!.getAttribute('href')!;
+
+    expect(decodeURIComponent(href)).not.toContain('<script');
   });
 });
 
