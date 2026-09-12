@@ -21,10 +21,10 @@ test.describe('the widget loads', () => {
 
     await page.goto('/');
 
-    // Without this the visitor gets a working-looking login screen that can never authenticate
-    // them, and no indication why.
-    await expect(page.getByTestId('webChannelDisabledBanner')).toBeVisible();
-    await expect(page.getByTestId('webChannelDisabledBanner')).toContainText('not enabled');
+    // A page rather than a banner over the form: the form would take a phone number, send
+    // nothing, and leave the visitor waiting for a code that is never coming.
+    await expect(page.getByTestId('webChannelDisabled')).toBeVisible();
+    await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
   });
 
   // An unreachable backend is neither presented as a disabled channel nor quietly served on the
@@ -40,7 +40,7 @@ test.describe('the widget loads', () => {
     // Neither the login form nor the disabled banner — this is a transient failure, not a
     // settled state, and not a usable app.
     await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
-    await expect(page.getByTestId('webChannelDisabledBanner')).toHaveCount(0);
+    await expect(page.getByTestId('webChannelDisabled')).toHaveCount(0);
   });
 
   test('retrying recovers once branding is reachable', async ({ page }) => {

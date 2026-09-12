@@ -46,9 +46,10 @@ export interface OutboundMedia {
   caption?: string;
 }
 
-// Server pushes about the credential the channel is holding: "token_expiring" while there is
-// still time to renew, "session_expired" once the channel has been stopped.
-export type WebChannelSessionEvent = 'token_expiring' | 'session_expired';
+// Server pushes that end or extend the session: "token_expiring" while there is still time to
+// renew, "session_expired" once the channel has been stopped, and "web_channel_disabled" when
+// the organisation itself switched the channel off and every room was closed.
+export type WebChannelSessionEvent = 'token_expiring' | 'session_expired' | 'web_channel_disabled';
 
 type SessionEventListener = (event: WebChannelSessionEvent) => void;
 
@@ -127,6 +128,7 @@ export const connectAndJoin = ({ token, contactId, handlers = {} }: ConnectParam
 
   channel.on('token_expiring', () => emitSessionEvent('token_expiring'));
   channel.on('session_expired', () => emitSessionEvent('session_expired'));
+  channel.on('web_channel_disabled', () => emitSessionEvent('web_channel_disabled'));
 
   return new Promise((resolve, reject) => {
     channel

@@ -112,14 +112,16 @@ test.describe('per-org theming', () => {
     expect(await rootVar(slow, '--primary')).toBe(settled);
   });
 
-  // 404 is a settled state, so the app still renders — on the default palette, with the banner.
+  // 404 is a settled state rather than a transient one, so something renders — the disabled
+  // page, on the default palette, with no way to sign in.
   test('uses the default palette when the org has no web channel', async ({ page }) => {
     await serveBrandingNotFound(page);
 
     await page.goto('/login');
 
-    await expect(page.getByTestId('webChannelLogin')).toBeVisible();
-    // No logo to show, so the circle falls back to the name's initials rather than to a mark.
+    await expect(page.getByTestId('webChannelDisabled')).toBeVisible();
+    await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
+    // No logo to show, so the frame falls back to the name's initials rather than to a mark.
     await expect(page.getByTestId('orgLogo')).toHaveCount(0);
     await expect(page.getByTestId('orgInitials')).toBeVisible();
     // A 404 still resolves to a palette — the default one — rather than leaving :root untouched.

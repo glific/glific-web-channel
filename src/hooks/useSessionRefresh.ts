@@ -16,6 +16,7 @@ import {
   webChannelErrorStatus,
 } from '@/services/webChannelAuth';
 import { getActiveChannel, onWebChannelSessionEvent, pushRenewToken } from '@/services/webChannelSocket';
+import { markWebChannelDisabled } from '@/services/branding';
 
 /**
  * Renews the stored token before it expires, so a beneficiary mid-conversation is never bounced
@@ -108,6 +109,10 @@ export const useSessionRefresh = (): void => {
         renew({ force: true });
         return;
       }
+
+      // The organisation switched the channel off. Recorded before navigating, so /login
+      // renders the disabled page rather than a sign-in form that can never authenticate.
+      if (event === 'web_channel_disabled') markWebChannelDisabled();
 
       clearWebChannelSession();
       if (active) navigate('/login', { replace: true });

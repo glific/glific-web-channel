@@ -58,6 +58,16 @@ export const getBranding = (): Branding => branding;
 
 export const isWebChannelEnabled = (): boolean => webChannelEnabled;
 
+/**
+ * Record that the organisation has switched the channel off mid-session.
+ *
+ * The server tells an open room over the socket rather than by answering a request, so there is
+ * no 404 to learn it from — but the app has to reach the same state a reload would.
+ */
+export const markWebChannelDisabled = (): void => {
+  webChannelEnabled = false;
+};
+
 /** Whether there is anything to show on the About screen at all. */
 export const hasOrgProfile = (about: OrgAbout): boolean => Object.values(about).some(Boolean);
 
