@@ -10,7 +10,9 @@ const mockedAxios = axios as any;
 const EMPTY_ABOUT = { description: null, address: null, website: null, email: null, hours: null };
 
 const ORG = {
+  enabled: true,
   display_name: 'Example NGO',
+  whatsapp_number: null,
   logo_url: 'https://cdn.example.org/logo.png',
   primary_color: '#4c3bcf',
   primary_foreground: '#fafafa',
@@ -55,6 +57,15 @@ describe('applyBranding', () => {
     applyBranding(ORG);
 
     expect(document.title).toBe('Example NGO — Chat');
+  });
+
+  it('drops the tab icon entirely for a channel that is switched off', () => {
+    applyBranding(ORG);
+    expect(document.querySelector('link[rel="icon"]')).not.toBeNull();
+
+    applyBranding({ ...ORG, enabled: false });
+
+    expect(document.querySelector('link[rel="icon"]')).toBeNull();
   });
 
   // The widget is a standalone site on the org's own subdomain, so a Glific mark in the tab is a
@@ -119,10 +130,23 @@ describe('fetchBranding', () => {
     expect(branding?.about).toEqual(EMPTY_ABOUT);
   });
 
-  it('reports the channel as disabled on a 404, rather than throwing', async () => {
+  // The endpoint answers 200 either way now, so `enabled` is the only thing that says the org
+  // has the channel off — and it carries the name and number the disabled page renders.
+  it('reports the channel as disabled from the payload, not from a status code', async () => {
+    const disabled = { enabled: false, display_name: 'Example NGO', whatsapp_number: '919876543210' };
+    mockedAxios.get.mockResolvedValue({ data: { data: disabled } });
+
+    const result = await fetchBranding();
+
+    expect(result.status).toBe('disabled');
+    expect(result.branding?.display_name).toBe('Example NGO');
+    expect(result.branding?.whatsapp_number).toBe('919876543210');
+  });
+
+  it('treats a 404 as unavailable, since the endpoint no longer says "off" that way', async () => {
     mockedAxios.get.mockRejectedValue({ response: { status: 404 } });
 
-    await expect(fetchBranding()).resolves.toEqual({ branding: null, status: 'disabled' });
+    await expect(fetchBranding()).resolves.toEqual({ branding: null, status: 'unavailable' });
   });
 
   it('separates an unreachable backend from a disabled channel', async () => {
@@ -160,13 +184,18 @@ describe('loadBranding', () => {
     expect(isWebChannelEnabled()).toBe(true);
   });
 
-  // A 404 is a settled state, not a transient one, so the app still renders — with a banner.
-  it('records the channel as disabled after a 404 and still paints the default palette', async () => {
-    mockedAxios.get.mockRejectedValue({ response: { status: 404 } });
+  // A switched-off channel is a settled state, not a transient one, so the app still renders —
+  // as the disabled page, which needs the name and the number that came with it.
+  it('records the channel as disabled and keeps what it was told about the org', async () => {
+    const disabled = { enabled: false, display_name: 'Example NGO', whatsapp_number: '919876543210' };
+    mockedAxios.get.mockResolvedValue({ data: { data: disabled } });
 
     await expect(loadBranding()).resolves.toBe('disabled');
 
     expect(isWebChannelEnabled()).toBe(false);
-    expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#119656');
+    expect(getBranding().whatsapp_number).toBe('919876543210');
+    // No chat to mark, and an org that never configured the channel has no logo to mark it with.
+    expect(document.querySelector('link[rel="icon"]')).toBeNull();
+    expect(document.title).toBe('Example NGO');
   });
 });

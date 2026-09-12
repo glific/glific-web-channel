@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { DARK_ACCENT_ORG, serveBranding, serveBrandingNotFound } from './support/branding';
+import { DARK_ACCENT_ORG, serveBranding, serveBrandingDisabled } from './support/branding';
 
 test.describe('the widget loads', () => {
   test('an unauthenticated visitor lands on the login screen', async ({ page }) => {
@@ -17,7 +17,7 @@ test.describe('the widget loads', () => {
   });
 
   test('tells the visitor when this org has not enabled the web channel', async ({ page }) => {
-    await serveBrandingNotFound(page);
+    await serveBrandingDisabled(page);
 
     await page.goto('/');
 

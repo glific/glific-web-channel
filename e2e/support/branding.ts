@@ -1,7 +1,9 @@
 import type { Page } from '@playwright/test';
 
 export interface OrgBranding {
+  enabled: true;
   display_name: string;
+  whatsapp_number: string | null;
   logo_url: string | null;
   primary_color: string;
   primary_foreground: string;
@@ -33,14 +35,19 @@ export const serveBranding = (page: Page, branding: OrgBranding) =>
     }),
   );
 
-/** An org without the `web_channel_enabled` feature flag. */
-export const serveBrandingNotFound = (page: Page) =>
+/**
+ * An org with the web channel switched off.
+ *
+ * 200, not 404: the endpoint still has the org's name and the WhatsApp number to send a
+ * visitor to, and the disabled page is built from them.
+ */
+export const serveBrandingDisabled = (page: Page, displayName = 'Switched Off NGO') =>
   page.route(BRANDING_ROUTE, (route) =>
     route.fulfill({
-      status: 404,
+      status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        error: { status: 404, message: 'Web channel is not enabled.' },
+        data: { enabled: false, display_name: displayName, whatsapp_number: '919876543210' },
       }),
     }),
   );
@@ -53,7 +60,9 @@ export const rootVar = (page: Page, name: string) =>
 // a dark primary and Amber a light one, so between them they cover both foreground cases — the
 // server computes `primary_foreground`, and these are what it returns for those two colours.
 export const DARK_ACCENT_ORG: OrgBranding = {
+  enabled: true,
   display_name: 'Violet NGO',
+  whatsapp_number: null,
   logo_url: 'https://cdn.example.org/violet.svg',
   primary_color: '#5b21b6',
   primary_foreground: '#fafafa',
@@ -68,7 +77,9 @@ export const DARK_ACCENT_ORG: OrgBranding = {
 };
 
 export const LIGHT_ACCENT_ORG: OrgBranding = {
+  enabled: true,
   display_name: 'Amber NGO',
+  whatsapp_number: null,
   logo_url: 'https://cdn.example.org/amber.svg',
   primary_color: '#ffb900',
   primary_foreground: '#18181b',

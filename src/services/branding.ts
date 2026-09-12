@@ -14,7 +14,11 @@ export interface OrgAbout {
 
 /** Branding = the org's two colours + logo + name + the business profile. */
 export interface Branding {
+  /** False when the org has the web channel switched off; the rest is then defaults. */
+  enabled: boolean;
   display_name: string;
+  /** The org's own WhatsApp number, sent only when the channel is off — where else to go. */
+  whatsapp_number: string | null;
   logo_url: string | null;
   primary_color: string;
   /** Computed server-side to stay legible on `primary_color`; never chosen by an admin. */
@@ -30,7 +34,9 @@ const EMPTY_ABOUT: OrgAbout = { description: null, address: null, website: null,
 // the disabled case where the banner carries the explanation. A branding fetch that *fails* does
 // not fall back — see BrandingStatus below.
 const FALLBACK_BRANDING: Branding = {
+  enabled: true,
   display_name: 'Glific',
+  whatsapp_number: null,
   logo_url: null,
   primary_color: '#119656',
   primary_foreground: '#fafafa',
@@ -40,7 +46,8 @@ const FALLBACK_BRANDING: Branding = {
 
 /**
  * - `ok`          branding resolved; render the app
- * - `disabled`    404 — this org has not enabled the web channel; render the app with a banner
+ * - `disabled`    the org has the web channel switched off; render the disabled page, which the
+ *                 200 carries the org's name and WhatsApp number for
  * - `unavailable` the request failed; render an error page rather than a plausible-looking
  *                 default, which under an NGO's own domain would read as the wrong organisation
  */
@@ -50,8 +57,8 @@ export type BrandingStatus = 'ok' | 'disabled' | 'unavailable';
 // and no loading state is needed anywhere.
 let branding: Branding = FALLBACK_BRANDING;
 
-// A 404 means this org has not switched the web channel on — worth telling the visitor, and
-// distinct from the backend simply being unreachable.
+// Whether the org has the channel switched on — worth telling the visitor, and distinct from
+// the backend simply being unreachable.
 let webChannelEnabled = true;
 
 export const getBranding = (): Branding => branding;
@@ -64,8 +71,16 @@ export const isWebChannelEnabled = (): boolean => webChannelEnabled;
  * The server tells an open room over the socket rather than by answering a request, so there is
  * no 404 to learn it from — but the app has to reach the same state a reload would.
  */
-export const markWebChannelDisabled = (): void => {
+export const markWebChannelDisabled = async (): Promise<void> => {
   webChannelEnabled = false;
+
+  // Re-asked rather than assumed: the disabled page needs the org's WhatsApp number, and the
+  // socket push that got us here carries nothing.
+  const { branding: refreshed } = await fetchBranding();
+  if (refreshed && !refreshed.enabled) {
+    branding = refreshed;
+    applyBranding(branding);
+  }
 };
 
 /** Whether there is anything to show on the About screen at all. */
@@ -99,9 +114,19 @@ const monogramFavicon = ({ display_name: name, primary_color, primary_foreground
  * The widget is a standalone site on the organisation's own subdomain, so a Glific mark in the
  * tab is a branding leak. `type` is dropped rather than updated because a logo can be a PNG, a
  * JPEG or an SVG and the browser sniffs it correctly either way.
+ *
+ * A switched-off channel gets no icon at all rather than a monogram: there is no chat to mark,
+ * and an org that never configured the channel has no logo to mark it with.
  */
 const applyFavicon = (next: Branding): void => {
-  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link');
+  const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+
+  if (!next.enabled) {
+    existing?.remove();
+    return;
+  }
+
+  const link = existing ?? document.createElement('link');
 
   link.rel = 'icon';
   link.removeAttribute('type');
@@ -128,7 +153,7 @@ export const applyBranding = (next: Branding): void => {
   root.style.setProperty('--brand-accent', next.secondary_color);
   root.style.setProperty('--ring', next.primary_color);
 
-  document.title = `${next.display_name} — Chat`;
+  document.title = next.enabled ? `${next.display_name} — Chat` : next.display_name;
   applyFavicon(next);
 };
 
@@ -152,9 +177,15 @@ const normalize = (data: Partial<Branding> | null): Branding => ({
 export const fetchBranding = async (): Promise<BrandingResult> => {
   try {
     const { data } = await axios.get(WEB_CHANNEL_BRANDING);
-    return { branding: data?.data ? normalize(data.data) : null, status: 'ok' };
-  } catch (error: any) {
-    return { branding: null, status: error?.response?.status === 404 ? 'disabled' : 'unavailable' };
+    if (!data?.data) return { branding: null, status: 'unavailable' };
+
+    const branding = normalize(data.data);
+
+    return { branding, status: branding.enabled ? 'ok' : 'disabled' };
+  } catch {
+    // The endpoint answers 200 either way now, so a failure says nothing about whether the org
+    // has the channel on — only that we could not ask.
+    return { branding: null, status: 'unavailable' };
   }
 };
 

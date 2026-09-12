@@ -8,7 +8,7 @@ import {
   logoFrame,
   rootVar,
   serveBranding,
-  serveBrandingNotFound,
+  serveBrandingDisabled,
 } from './support/branding';
 
 // WCAG AA for normal-size text. Button labels are normal-size.
@@ -112,19 +112,22 @@ test.describe('per-org theming', () => {
     expect(await rootVar(slow, '--primary')).toBe(settled);
   });
 
-  // 404 is a settled state rather than a transient one, so something renders — the disabled
-  // page, on the default palette, with no way to sign in.
-  test('uses the default palette when the org has no web channel', async ({ page }) => {
-    await serveBrandingNotFound(page);
+  // A switched-off channel is a settled state rather than a transient one, so something renders
+  // — the disabled page, on the default palette, with no way to sign in.
+  test('renders the disabled page when the org has the web channel switched off', async ({ page }) => {
+    await serveBrandingDisabled(page, 'Yein Udaan');
 
     await page.goto('/login');
 
-    await expect(page.getByTestId('webChannelDisabled')).toBeVisible();
+    await expect(page.getByTestId('disabledOrgName')).toHaveText('Yein Udaan');
     await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
-    // No logo to show, so the frame falls back to the name's initials rather than to a mark.
+    // No logo and no monogram: the name is what identifies the org here.
     await expect(page.getByTestId('orgLogo')).toHaveCount(0);
-    await expect(page.getByTestId('orgInitials')).toBeVisible();
-    // A 404 still resolves to a palette — the default one — rather than leaving :root untouched.
+    await expect(page.getByTestId('orgInitials')).toHaveCount(0);
+    await expect(page.getByTestId('whatsappLink')).toHaveAttribute('href', 'https://wa.me/919876543210');
+    // No chat to mark, so the Glific icon from index.html is removed rather than replaced.
+    await expect(page.locator('link[rel="icon"]')).toHaveCount(0);
+    // Still resolves to a palette — the default one — rather than leaving :root untouched.
     expect(await rootVar(page, '--primary')).toBe('#119656');
     expect(await rootVar(page, '--primary')).not.toBe(UNTHEMED_PRIMARY);
   });

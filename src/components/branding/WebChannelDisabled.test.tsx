@@ -12,7 +12,9 @@ import { tokenExpiringIn } from '@/test/token';
 vi.mock('@/services/branding', () => ({
   isWebChannelEnabled: () => false,
   getBranding: () => ({
+    enabled: false,
     display_name: 'Yein Udaan',
+    whatsapp_number: '919876543210',
     logo_url: null,
     primary_color: '#119656',
     primary_foreground: '#fafafa',
@@ -28,8 +30,20 @@ describe('<WebChannelDisabled />', () => {
   it('names the organisation and points the contact at WhatsApp instead', () => {
     render(<WebChannelDisabled />);
 
-    expect(screen.getByTestId('webChannelDisabled')).toHaveTextContent('Yein Udaan');
-    expect(screen.getByTestId('webChannelDisabled')).toHaveTextContent('reach them on WhatsApp');
+    expect(screen.getByTestId('disabledOrgName')).toHaveTextContent('Yein Udaan');
+    expect(screen.getByTestId('webChannelDisabled')).toHaveTextContent(
+      'Yein Udaan has not enabled messaging through browser.'
+    );
+    expect(screen.getByTestId('whatsappLink')).toHaveAttribute('href', 'https://wa.me/919876543210');
+  });
+
+  // The name identifies the org here; an org that never configured the channel never uploaded a
+  // logo, so there is nothing to show.
+  it('shows no logo', () => {
+    render(<WebChannelDisabled />);
+
+    expect(screen.queryByTestId('orgLogo')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('orgInitials')).not.toBeInTheDocument();
   });
 });
 
