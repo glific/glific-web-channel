@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 
 import type { WebChannelMessage } from '@/services/webChannelSocket';
 import { MessageBubble } from './MessageBubble';
@@ -61,5 +61,83 @@ describe('<MessageBubble />', () => {
     render(<MessageBubble message={message({ type: 'location', body: maps })} />);
 
     expect(screen.getByTestId('locationContent')).toHaveAttribute('href', maps);
+  });
+
+  describe('interactive messages', () => {
+    const quickReply = {
+      type: 'quick_reply',
+      content: { type: 'text', header: 'Pick one', text: 'Which course?' },
+      options: [{ title: 'Science' }, { title: 'Coding' }],
+    };
+
+    const list = {
+      type: 'list',
+      title: 'Courses',
+      body: 'Choose a subject',
+      items: [
+        { title: 'Sciences', options: [{ title: 'Physics', description: 'Mechanics and more' }] },
+        { title: 'Arts', options: [{ title: 'Painting' }] },
+      ],
+    };
+
+    it('renders a quick reply as its text plus one button per option', () => {
+      render(
+        <MessageBubble
+          message={message({ flow: 'outbound', body: 'Which course?', interactive_content: quickReply })}
+          onSelectOption={vi.fn()}
+        />
+      );
+
+      expect(screen.getByTestId('interactiveContent')).toHaveTextContent('Which course?');
+      expect(screen.getAllByTestId('interactiveOption').map((b) => b.textContent)).toEqual([
+        'Science',
+        'Coding',
+      ]);
+    });
+
+    // A list nests its options inside sections; the widget has no room for WhatsApp's two-step
+    // "open the list, then choose", so they are flattened into the same buttons.
+    it('flattens a list\'s sections into options', () => {
+      render(
+        <MessageBubble
+          message={message({ flow: 'outbound', body: 'Choose a subject', interactive_content: list })}
+          onSelectOption={vi.fn()}
+        />
+      );
+
+      const options = screen.getAllByTestId('interactiveOption');
+      expect(options).toHaveLength(2);
+      expect(options[0]).toHaveTextContent('Physics');
+      expect(options[0]).toHaveTextContent('Mechanics and more');
+      expect(options[1]).toHaveTextContent('Painting');
+    });
+
+    it('answers with the option title when one is tapped', () => {
+      const onSelectOption = vi.fn();
+      render(
+        <MessageBubble
+          message={message({ flow: 'outbound', body: 'Which course?', interactive_content: quickReply })}
+          onSelectOption={onSelectOption}
+        />
+      );
+
+      fireEvent.click(screen.getAllByTestId('interactiveOption')[1]);
+
+      expect(onSelectOption).toHaveBeenCalledWith('Coding');
+    });
+
+    // The contact's own choice comes back as a plain text message; rendering buttons on it would
+    // invite them to answer their own answer.
+    it('does not offer options on the contact\'s own message', () => {
+      render(
+        <MessageBubble
+          message={message({ flow: 'inbound', body: 'Coding', interactive_content: quickReply })}
+          onSelectOption={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByTestId('interactiveOption')).not.toBeInTheDocument();
+      expect(screen.getByTestId('content')).toHaveTextContent('Coding');
+    });
   });
 });

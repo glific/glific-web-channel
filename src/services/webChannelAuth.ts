@@ -8,10 +8,11 @@ export interface WebChannelSession {
   token: string;
   contactId: number | string;
   name?: string;
+  phone?: string;
 }
 
-export const setWebChannelSession = ({ token, contactId, name }: WebChannelSession): void => {
-  localStorage.setItem(WEB_CHANNEL_SESSION_KEY, JSON.stringify({ token, contactId, name }));
+export const setWebChannelSession = ({ token, contactId, name, phone }: WebChannelSession): void => {
+  localStorage.setItem(WEB_CHANNEL_SESSION_KEY, JSON.stringify({ token, contactId, name, phone }));
 };
 
 export const getWebChannelSession = (): WebChannelSession | null => {
@@ -26,10 +27,10 @@ export const getWebChannelSession = (): WebChannelSession | null => {
 
 export const getWebChannelToken = (): string | null => getWebChannelSession()?.token ?? null;
 
-export const getWebChannelContact = (): { contactId: number | string; name?: string } | null => {
+export const getWebChannelContact = (): { contactId: number | string; name?: string; phone?: string } | null => {
   const session = getWebChannelSession();
   if (!session) return null;
-  return { contactId: session.contactId, name: session.name };
+  return { contactId: session.contactId, name: session.name, phone: session.phone };
 };
 
 export const clearWebChannelSession = (): void => {

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { DARK_ACCENT_ORG, serveBranding } from './support/branding';
 import {
+  TEST_COUNTRY_CODE,
   TEST_PHONE,
   countRequests,
   seedSession,
@@ -31,8 +32,8 @@ test.describe('signing in with an OTP', () => {
 
     // The code step confirms the number back, because request-otp answers identically for a
     // mistyped one and this is the only place the user can catch it.
-    await expect(page.getByLabel('Enter the OTP')).toBeVisible();
-    await expect(page.getByText(TEST_PHONE)).toBeVisible();
+    await expect(page.getByTestId('otpInput')).toBeVisible();
+    await expect(page.getByTestId('otpSentTo')).toContainText(TEST_PHONE);
 
     await submitOtp(page, '123456');
 
@@ -62,7 +63,7 @@ test.describe('signing in with an OTP', () => {
 
     // 422 text is already user-facing, so it is shown as sent rather than replaced.
     await expect(page.getByTestId('phoneRequestError')).toContainText('not valid');
-    await expect(page.getByLabel('Enter your phone number')).toBeVisible();
+    await expect(page.getByTestId('phoneInput')).toBeVisible();
   });
 
   // A 429 means a code WAS sent, just not by this request. Treating it as a failure would leave a
@@ -73,7 +74,7 @@ test.describe('signing in with an OTP', () => {
     await page.goto('/login');
     await submitPhone(page);
 
-    await expect(page.getByLabel('Enter the OTP')).toBeVisible();
+    await expect(page.getByTestId('otpInput')).toBeVisible();
     await expect(page.getByTestId('otpNotice')).toContainText('just sent');
     await expect(page.getByTestId('phoneRequestError')).toHaveCount(0);
   });
@@ -112,7 +113,9 @@ test.describe('signing in with an OTP', () => {
     await submitPhone(page);
     await page.getByTestId('otpBack').click();
 
-    await expect(page.getByLabel('Enter your phone number')).toHaveValue(TEST_PHONE);
+    // The national part stays; the prefix beside it was never touched.
+    await expect(page.getByTestId('phoneInput')).toHaveValue(TEST_PHONE.replace(/^91/, ''));
+    await expect(page.getByTestId('countryCode')).toHaveValue(TEST_COUNTRY_CODE);
   });
 });
 

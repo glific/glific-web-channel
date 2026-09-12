@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-import { THEMES } from '../src/services/themes';
 import {
   DARK_ACCENT_ORG,
   LIGHT_ACCENT_ORG,
@@ -9,7 +8,7 @@ import {
   logoFrame,
   rootVar,
   serveBranding,
-  serveBrandingNotFound,
+  serveBrandingDisabled,
 } from './support/branding';
 
 // WCAG AA for normal-size text. Button labels are normal-size.
@@ -37,17 +36,17 @@ test.describe('per-org theming', () => {
       [lightOrg, LIGHT_ACCENT_ORG],
     ] as const) {
       await expect(page.getByTestId('phoneSubmit')).toBeVisible();
-      await expect(page.getByText(org.display_name)).toBeVisible();
+      await expect(page.getByTestId('orgName')).toHaveText(org.display_name);
       await expect(page.getByTestId('orgLogo')).toHaveAttribute('src', org.logo_url!);
       await expect(page).toHaveTitle(`${org.display_name} — Chat`);
-      expect(await rootVar(page, '--primary')).toBe(THEMES[org.theme as keyof typeof THEMES].primary);
+      expect(await rootVar(page, '--primary')).toBe(org.primary_color);
     }
 
     expect(await rootVar(darkOrg, '--primary')).not.toBe(await rootVar(lightOrg, '--primary'));
   });
 
   // Whatever an org uploads — landscape wordmark, square mark, tall crest — the frame is the
-  // same square, so two orgs' login cards stay visually consistent.
+  // same square, so two orgs' sign-in screens stay visually consistent.
   test('the logo renders in a fixed square frame whatever its aspect ratio', async ({ context }) => {
     const wide = await context.newPage();
     await serveBranding(wide, DARK_ACCENT_ORG);
@@ -113,16 +112,46 @@ test.describe('per-org theming', () => {
     expect(await rootVar(slow, '--primary')).toBe(settled);
   });
 
-  // 404 is a settled state, so the app still renders — on the default theme, with the banner.
-  test('uses the default theme when the org has no web channel', async ({ page }) => {
-    await serveBrandingNotFound(page);
+  // A switched-off channel is a settled state rather than a transient one, so something renders
+  // — the disabled page, on the default palette, with no way to sign in.
+  test('renders the disabled page when the org has the web channel switched off', async ({ page }) => {
+    await serveBrandingDisabled(page, 'Yein Udaan');
 
     await page.goto('/login');
 
-    await expect(page.getByTestId('webChannelLogin')).toBeVisible();
+    await expect(page.getByTestId('disabledOrgName')).toHaveText('Yein Udaan');
+    await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
+    // No logo and no monogram: the name is what identifies the org here.
     await expect(page.getByTestId('orgLogo')).toHaveCount(0);
-    // A 404 still resolves to a theme — the default one — rather than leaving :root untouched.
-    expect(await rootVar(page, '--primary')).toBe(THEMES.zinc.primary);
+    await expect(page.getByTestId('orgInitials')).toHaveCount(0);
+    await expect(page.getByTestId('whatsappLink')).toHaveAttribute('href', 'https://wa.me/919876543210');
+    // No chat to mark, so the Glific icon from index.html is removed rather than replaced.
+    await expect(page.locator('link[rel="icon"]')).toHaveCount(0);
+    // Still resolves to a palette — the default one — rather than leaving :root untouched.
+    expect(await rootVar(page, '--primary')).toBe('#119656');
     expect(await rootVar(page, '--primary')).not.toBe(UNTHEMED_PRIMARY);
+  });
+
+  // The widget is a standalone site on the org's own subdomain, so the Glific mark shipped in
+  // index.html must not survive into an NGO's tab.
+  test('the tab icon becomes the org logo, not the one in index.html', async ({ page }) => {
+    await serveBranding(page, DARK_ACCENT_ORG);
+    await page.goto('/login');
+    await expect(page.getByTestId('phoneSubmit')).toBeVisible();
+
+    const href = await page.locator('link[rel="icon"]').getAttribute('href');
+    expect(href).toBe(DARK_ACCENT_ORG.logo_url);
+  });
+
+  // The business profile belongs behind sign-in, on the About screen the chat menu opens. The
+  // org's description still carries on the hero, which is what identifies the organisation.
+  test('keeps the business profile off the sign-in screen', async ({ page }) => {
+    await serveBranding(page, DARK_ACCENT_ORG);
+    await page.goto('/login');
+
+    await expect(page.getByTestId('phoneSubmit')).toBeVisible();
+    await expect(page.getByTestId('aboutToggle')).toHaveCount(0);
+    await expect(page.getByTestId('orgProfile')).toHaveCount(0);
+    await expect(page.getByTestId('orgCaption')).toContainText(DARK_ACCENT_ORG.about.description!);
   });
 });

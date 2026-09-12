@@ -16,6 +16,7 @@ import {
   webChannelErrorStatus,
 } from '@/services/webChannelAuth';
 import { getActiveChannel, onWebChannelSessionEvent, pushRenewToken } from '@/services/webChannelSocket';
+import { markWebChannelDisabled } from '@/services/branding';
 
 /**
  * Renews the stored token before it expires, so a beneficiary mid-conversation is never bounced
@@ -71,10 +72,10 @@ export const useSessionRefresh = (): void => {
       refreshing.current = true;
       renewToken(token)
         .then(({ data }) => {
-          const { token: renewed, contact_id: contactId, name } = data?.data ?? {};
+          const { token: renewed, contact_id: contactId, name, phone } = data?.data ?? {};
           if (!renewed) return;
 
-          setWebChannelSession({ token: renewed, contactId, name });
+          setWebChannelSession({ token: renewed, contactId, name, phone });
           handOverToChannel(renewed);
         })
         .catch((error) => {
@@ -108,6 +109,11 @@ export const useSessionRefresh = (): void => {
         renew({ force: true });
         return;
       }
+
+      // The organisation switched the channel off. Recorded before navigating, so /login
+      // renders the disabled page rather than a sign-in form that can never authenticate. Not
+      // awaited: the flag is set synchronously and only the WhatsApp number arrives later.
+      if (event === 'web_channel_disabled') void markWebChannelDisabled();
 
       clearWebChannelSession();
       if (active) navigate('/login', { replace: true });

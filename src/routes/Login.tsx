@@ -1,17 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
-import { Logo } from '@/components/branding/Logo';
+import { OrgHero } from '@/components/branding/OrgHero';
+import { OtpInput } from '@/components/auth/OtpInput';
 import { getBranding } from '@/services/branding';
 import { WEB_CHANNEL_OTP_RESEND_SECONDS } from '@/config';
+import { cn } from '@/lib/utils';
 import {
   requestOtp,
   verifyOtp,
@@ -20,19 +19,23 @@ import {
   webChannelErrorStatus,
 } from '@/services/webChannelAuth';
 
+const fullNumber = (countryCode: string, phone: string) => `${countryCode}${phone}`.replace(/[\s()-]/g, '');
+
 // Courtesy pre-check only — the server runs ExPhoneNumber and stays the authority, so a number
 // that passes here can still come back 422.
-const phoneSchema = z.object({
-  phone: z
-    .string()
-    .trim()
-    .min(1, 'Please enter your phone number.')
-    .transform((value) => value.replace(/[\s()-]/g, ''))
-    .refine(
-      (value) => /^\+?[1-9]\d{7,14}$/.test(value),
-      'Enter your number with country code, for example 919820198765.'
-    ),
-});
+const phoneSchema = z
+  .object({
+    countryCode: z.string().trim().regex(/^\+?\d{1,4}$/, 'Enter a country code, for example +91.'),
+    phone: z.string().trim().min(1, 'Please enter your phone number.'),
+    // Signing in is what records consent for this channel, so it gates the request rather than
+    // being collected after a code has already gone out.
+    consent: z.literal(true),
+  })
+  .refine(({ countryCode, phone }) => /^\+?[1-9]\d{7,14}$/.test(fullNumber(countryCode, phone)), {
+    path: ['phone'],
+    message: 'Enter your number without the country code, for example 9820198765.',
+  });
+
 const otpSchema = z.object({
   // PasswordlessAuth mints 6 digits, so a shorter entry can only ever come back 401.
   otp: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code we sent you.'),
@@ -41,8 +44,61 @@ const otpSchema = z.object({
 type PhoneValues = z.infer<typeof phoneSchema>;
 type OtpValues = z.infer<typeof otpSchema>;
 
+const Disclosure = ({ label, testId, children }: { label: string; testId: string; children: ReactNode }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        data-testid={testId}
+        className="inline-flex items-center gap-1 text-sm font-semibold text-primary"
+      >
+        {label}
+        <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} aria-hidden="true" />
+      </button>
+      {open && <div className="mt-2">{children}</div>}
+    </div>
+  );
+};
+
+// The organisation is the data controller and Glific does not know its retention policy, so this
+// says what the channel itself does and points at the organisation rather than inventing terms on
+// its behalf.
+const DataUseNote = ({ orgName, email }: { orgName: string; email: string | null }) => (
+  <div className="rounded-xl bg-muted px-3 py-3 text-xs leading-relaxed text-muted-foreground" data-testid="dataUseNote">
+    <p>
+      <strong className="text-foreground">What's collected.</strong> The messages and responses you send on this chat,
+      and the phone number you sign in with.
+    </p>
+    <p className="mt-2">
+      <strong className="text-foreground">Why.</strong> So {orgName} can run the programme with you and pick the
+      conversation up where you left it.
+    </p>
+    <p className="mt-2">
+      <strong className="text-foreground">How long.</strong> For as long as {orgName} runs the programme, under their
+      own retention policy.
+      {email && (
+        <>
+          {' '}
+          Ask them at{' '}
+          <a href={`mailto:${email}`} className="text-primary hover:underline">
+            {email}
+          </a>
+          .
+        </>
+      )}
+    </p>
+  </div>
+);
+
 export const Login = () => {
   const navigate = useNavigate();
+  const branding = getBranding();
+  const orgName = branding.display_name;
+
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
@@ -52,7 +108,10 @@ export const Login = () => {
   // seconds left before a resend is allowed; mirrors the server's per-IP window
   const [resendIn, setResendIn] = useState(0);
 
-  const phoneForm = useForm<PhoneValues>({ resolver: zodResolver(phoneSchema), defaultValues: { phone: '' } });
+  const phoneForm = useForm<PhoneValues>({
+    resolver: zodResolver(phoneSchema),
+    defaultValues: { countryCode: '+91', phone: '', consent: false as true },
+  });
   const otpForm = useForm<OtpValues>({ resolver: zodResolver(otpSchema), defaultValues: { otp: '' } });
 
   // one interval per countdown; it is cleared when the countdown ends or the form unmounts
@@ -70,16 +129,17 @@ export const Login = () => {
   };
 
   const onPhoneSubmit = (values: PhoneValues) => {
+    const number = fullNumber(values.countryCode, values.phone);
     setError('');
     setNotice('');
     setLoading(true);
-    requestOtp(values.phone)
-      .then(() => goToOtpStep(values.phone))
+    requestOtp(number)
+      .then(() => goToOtpStep(number))
       .catch((requestError) => {
         // A 429 means a code was ALREADY sent, not that sending failed. Holding the user here
         // would leave a live code in their WhatsApp with nowhere to type it.
         if (webChannelErrorStatus(requestError) === 429) {
-          goToOtpStep(values.phone);
+          goToOtpStep(number);
           setNotice(webChannelErrorMessage(requestError));
           return;
         }
@@ -102,15 +162,14 @@ export const Login = () => {
       .finally(() => setResending(false));
   };
 
-  // Pre-fills the number so a mistyped digit is a correction rather than a retype. setResendIn(0)
-  // only stops a timer that is no longer on screen; onPhoneSubmit sets the countdown the user
-  // next sees.
+  // setResendIn(0) only stops a timer that is no longer on screen; onPhoneSubmit sets the
+  // countdown the user next sees. The consent tick survives, because it was given for this
+  // channel rather than for the number that was mistyped.
   const onChangeNumber = () => {
     setError('');
     setNotice('');
     setResendIn(0);
     otpForm.reset({ otp: '' });
-    phoneForm.reset({ phone });
     setStep('phone');
   };
 
@@ -121,106 +180,170 @@ export const Login = () => {
     verifyOtp(phone, values.otp)
       .then(({ data }) => {
         const { token, contact_id: contactId, name } = data?.data ?? {};
-        setWebChannelSession({ token, contactId, name });
+        setWebChannelSession({ token, contactId, name, phone });
         navigate('/chat');
       })
       .catch((verifyError) => setError(webChannelErrorMessage(verifyError)))
       .finally(() => setLoading(false));
   };
 
-  return (
-    <div className="flex min-h-[100svh] items-center justify-center bg-muted/30 p-4" data-testid="webChannelLogin">
-      <Card className="w-full max-w-sm gap-6 p-6">
-        <div className="flex flex-col items-center gap-1 text-center">
-          <Logo size={80} className="mb-2" />
-          <div className="text-xl font-semibold">{getBranding().display_name}</div>
-          <div className="text-xs text-muted-foreground">powered by Glific</div>
-        </div>
+  const phoneErrors = phoneForm.formState.errors;
 
+  return (
+    <div className="mx-auto flex min-h-[100svh] w-full max-w-md flex-col bg-background" data-testid="webChannelLogin">
+      <OrgHero />
+
+      <main className="flex flex-1 flex-col gap-5 px-6 py-6">
         {step === 'phone' ? (
-          <form className="flex flex-col gap-4" onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} noValidate>
+          <form className="flex flex-col gap-5" onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} noValidate>
+            <h2 className="text-lg font-bold">Enter your phone number to continue</h2>
+
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="phone">Enter your phone number</Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="Your phone number"
-                autoFocus
-                {...phoneForm.register('phone')}
-              />
-              <p className="text-xs text-muted-foreground">
-                We'll send a one-time code to this number on WhatsApp.
-              </p>
-              {phoneForm.formState.errors.phone && (
+              <div
+                className={cn(
+                  'flex items-center rounded-2xl border bg-background focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30',
+                  phoneErrors.phone || phoneErrors.countryCode ? 'border-destructive' : 'border-border'
+                )}
+              >
+                <input
+                  aria-label="Country code"
+                  data-testid="countryCode"
+                  className="w-16 bg-transparent py-3.5 text-center font-bold outline-none"
+                  {...phoneForm.register('countryCode')}
+                />
+                <span className="h-6 w-px bg-border" aria-hidden="true" />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoFocus
+                  placeholder="98765 43210"
+                  aria-label="Phone number"
+                  data-testid="phoneInput"
+                  className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-lg outline-none placeholder:text-muted-foreground"
+                  {...phoneForm.register('phone')}
+                />
+              </div>
+              {(phoneErrors.phone || phoneErrors.countryCode) && (
                 <p className="text-xs text-destructive" data-testid="phoneError">
-                  {phoneForm.formState.errors.phone.message}
+                  {phoneErrors.phone?.message ?? phoneErrors.countryCode?.message}
                 </p>
               )}
             </div>
-            <Button type="submit" data-testid="phoneSubmit" disabled={loading}>
-              {loading ? 'Sending…' : 'Send OTP'}
+
+            <div className="flex flex-col gap-2">
+              <label className="flex items-start gap-3 text-[0.95rem] leading-relaxed" data-testid="consentNotice">
+                <input
+                  type="checkbox"
+                  data-testid="consentCheckbox"
+                  className="mt-1 size-5 shrink-0 accent-primary"
+                  {...phoneForm.register('consent')}
+                />
+                <span>
+                  I agree to chat here and to <strong>{orgName}</strong> collecting my messages &amp; responses on this
+                  channel to run the programme. <strong>Required</strong>
+                </span>
+              </label>
+              {phoneErrors.consent && (
+                <p className="text-xs text-destructive" data-testid="consentError">
+                  Please agree before continuing.
+                </p>
+              )}
+              <Disclosure label="What's collected, why & for how long" testId="dataUseToggle">
+                <DataUseNote orgName={orgName} email={branding.about.email} />
+              </Disclosure>
+            </div>
+
+            <Button
+              type="submit"
+              size="lg"
+              className="h-13 rounded-2xl text-base font-bold"
+              data-testid="phoneSubmit"
+              disabled={loading}
+            >
+              {loading ? 'Sending…' : 'Send code'}
             </Button>
+
             {error && (
-              <p className="text-center text-xs text-destructive" data-testid="phoneRequestError">
+              <p className="text-center text-sm text-destructive" data-testid="phoneRequestError">
                 {error}
               </p>
             )}
           </form>
         ) : (
-          <form className="flex flex-col gap-4" onSubmit={otpForm.handleSubmit(onOtpSubmit)} noValidate>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="otp">Enter the OTP</Label>
-              <Input id="otp" inputMode="numeric" placeholder="OTP" autoFocus {...otpForm.register('otp')} />
-              <p className="text-xs text-muted-foreground">We sent a one-time code to {phone} on WhatsApp.</p>
-              <button
-                type="button"
-                data-testid="otpBack"
-                onClick={onChangeNumber}
-                className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                <ArrowLeft className="size-3" aria-hidden="true" />
-                Use a different number
-              </button>
-              {otpForm.formState.errors.otp && (
-                <p className="text-xs text-destructive">{otpForm.formState.errors.otp.message}</p>
-              )}
+          <form className="flex flex-col gap-5" onSubmit={otpForm.handleSubmit(onOtpSubmit)} noValidate>
+            <div>
+              <h2 className="text-lg font-bold">Enter the 6-digit code</h2>
+              {/* WhatsApp, not SMS: the backend sends the code as an HSM because SMS is not wired
+                  up (#5659). Saying SMS would send people to the wrong app. */}
+              <p className="mt-1 text-sm text-muted-foreground" data-testid="otpSentTo">
+                Sent on WhatsApp to {phone}
+              </p>
             </div>
-            <Button type="submit" data-testid="otpSubmit" disabled={loading}>
-              {loading ? 'Verifying…' : 'Verify'}
-            </Button>
+
+            <Controller
+              name="otp"
+              control={otpForm.control}
+              render={({ field }) => (
+                <OtpInput
+                  value={field.value}
+                  onChange={field.onChange}
+                  onComplete={() => !loading && otpForm.handleSubmit(onOtpSubmit)()}
+                  disabled={loading}
+                  invalid={!!otpForm.formState.errors.otp}
+                />
+              )}
+            />
+
+            {otpForm.formState.errors.otp && (
+              <p className="text-xs text-destructive">{otpForm.formState.errors.otp.message}</p>
+            )}
 
             {/* request-otp answers identically for a number it has never seen, so nothing tells
-                the user they mistyped. This block is their only recourse. */}
-            <div className="flex flex-col items-center gap-1.5 text-center">
-              <p className="text-xs text-muted-foreground">
-                Didn't get a code? It arrives as a WhatsApp message and can take a moment. Check that you
-                entered the number your WhatsApp account uses.
-              </p>
-              <Button
+                the user they mistyped. These two are their only recourse. */}
+            <p className="text-center text-sm text-muted-foreground">
+              Didn't get it?{' '}
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
                 data-testid="otpResend"
                 disabled={resending || resendIn > 0}
                 onClick={onResend}
+                className="font-semibold text-primary disabled:text-muted-foreground"
               >
                 {resendIn > 0 ? `Resend in ${resendIn}s` : resending ? 'Sending…' : 'Resend code'}
-              </Button>
-            </div>
+              </button>
+              {' · '}
+              <button type="button" data-testid="otpBack" onClick={onChangeNumber} className="font-semibold text-primary">
+                Use a different number
+              </button>
+            </p>
+
+            <Button
+              type="submit"
+              size="lg"
+              className="h-13 rounded-2xl text-base font-bold"
+              data-testid="otpSubmit"
+              disabled={loading}
+            >
+              {loading ? 'Verifying…' : 'Verify & continue'}
+            </Button>
 
             {notice && (
-              <p className="text-center text-xs text-muted-foreground" data-testid="otpNotice">
+              <p className="text-center text-sm text-muted-foreground" data-testid="otpNotice">
                 {notice}
               </p>
             )}
             {error && (
-              <p className="text-center text-xs text-destructive" data-testid="otpError">
+              <p className="text-center text-sm text-destructive" data-testid="otpError">
                 {error}
               </p>
             )}
           </form>
         )}
-      </Card>
+
+        <div className="flex-1" />
+
+        <p className="text-center text-xs text-muted-foreground">Powered by Glific</p>
+      </main>
     </div>
   );
 };

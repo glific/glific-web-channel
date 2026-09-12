@@ -32,8 +32,9 @@ const openChat = async (page: Page, options: Parameters<typeof mockPhoenix>[1] =
 
   await page.goto('/chat');
   await expect(page.getByTestId('webChannelChat')).toBeVisible();
-  // The banner clears only once the join is acknowledged; without waiting, a send races the channel.
-  await expect(page.getByTestId('connectionStatus')).toHaveCount(0);
+  // The header reads "online" only once the join is acknowledged; without waiting, a send races
+  // the channel.
+  await expect(page.getByTestId('connectionStatus')).toHaveText('online');
 
   return socket;
 };

@@ -14,6 +14,9 @@ export const VERIFY_OTP_ROUTE = '**/api/v1/web_channel/verify-otp';
 /** A number that clears the client-side format check, so the server is what answers. */
 export const TEST_PHONE = '919820198765';
 
+/** The prefix the form carries by default, and the half of TEST_PHONE it accounts for. */
+export const TEST_COUNTRY_CODE = '+91';
+
 /** The neutral acknowledgement, whether or not the number is known and whether or not it sent. */
 const REQUEST_OTP_MESSAGE = 'If this number is registered on WhatsApp, you will receive a one-time code';
 
@@ -51,16 +54,29 @@ export const countRequests = (page: Page, pattern: string) => {
   return seen;
 };
 
-/** Drive the phone step and land on the code step. */
-export const submitPhone = async (page: Page, phone = TEST_PHONE) => {
-  await page.getByLabel('Enter your phone number').fill(phone);
+/**
+ * Drive the phone step and land on the code step.
+ *
+ * The form splits the number into a country-code prefix and the national part, and consent gates
+ * the request — so this fills three controls rather than one.
+ */
+export const submitPhone = async (page: Page, phone = TEST_PHONE, { consent = true } = {}) => {
+  await page.getByTestId('countryCode').fill(TEST_COUNTRY_CODE);
+  await page.getByTestId('phoneInput').fill(phone.replace(/^\+?91/, ''));
+  if (consent) await page.getByTestId('consentCheckbox').check();
   await page.getByTestId('phoneSubmit').click();
 };
 
-/** Drive the code step. */
+/**
+ * Drive the code step.
+ *
+ * Typed into the first box: the whole code arriving in one input is the path a paste and a
+ * one-time-code autofill both take, and it spreads across the six from there.
+ */
 export const submitOtp = async (page: Page, otp: string) => {
-  await page.getByLabel('Enter the OTP').fill(otp);
-  await page.getByTestId('otpSubmit').click();
+  await page.getByTestId('otpDigit-0').fill(otp);
+  // Six digits submit themselves; anything shorter needs the button.
+  if (otp.length < 6) await page.getByTestId('otpSubmit').click();
 };
 
 /** The session the widget persists, as the browser sees it. */
