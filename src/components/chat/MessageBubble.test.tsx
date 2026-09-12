@@ -31,13 +31,14 @@ describe('<MessageBubble />', () => {
     expect(container.querySelector(tag)).toHaveAttribute('src', 'https://cdn.test/file');
   });
 
-  it('renders a document as a download link labelled by its caption', () => {
+  it('renders a document as a file chip: an icon, its caption, and a download link', () => {
     const document = message({ type: 'document', body: 'report.pdf', media: { url: 'https://cdn.test/report.pdf' } });
 
     render(<MessageBubble message={document} />);
 
     expect(screen.getByRole('link')).toHaveAttribute('href', 'https://cdn.test/report.pdf');
     expect(screen.getByRole('link')).toHaveTextContent('report.pdf');
+    expect(screen.getByRole('link').querySelector('svg')).toBeInTheDocument();
   });
 
   it('shows the caption alongside the media', () => {

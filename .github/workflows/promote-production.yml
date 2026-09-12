@@ -1,0 +1,61 @@
+name: Promote to production
+
+# Manually promote staging to production: fast-forward the `release` branch up to the
+# tip of `main`. Vercel is wired to deploy production off `release` (and staging off
+# `main`), so the push here is what triggers the production deploy — this workflow does
+# not deploy directly.
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch (or ref) to promote from (staging)
+        default: main
+        required: true
+
+# We only ever advance `release`; a fast-forward can never rewrite it, so a stale click
+# is a harmless no-op.
+permissions:
+  contents: write
+
+# Never run two promotions at once; queue them so `release` moves one step at a time.
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+jobs:
+  fast-forward:
+    name: Fast-forward release → ${{ inputs.source_ref }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # Full history on `release` so git can tell whether the source ref is a descendant
+      # (the precondition for a fast-forward).
+      - uses: actions/checkout@v4
+        with:
+          ref: release
+          fetch-depth: 0
+
+      - name: Fetch source ref
+        run: git fetch --no-tags origin "${{ inputs.source_ref }}"
+
+      - name: Fast-forward release
+        run: |
+          set -euo pipefail
+          target="$(git rev-parse "origin/${{ inputs.source_ref }}")"
+          echo "Fast-forwarding release to ${{ inputs.source_ref }} ($target)"
+          # --ff-only fails (and stops the job) if release is not an ancestor of the
+          # source ref, so we never clobber commits that only exist on release.
+          git merge --ff-only "$target"
+          git push origin "HEAD:release"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Promoted to production :rocket:"
+            echo ""
+            echo "- **From:** \`${{ inputs.source_ref }}\` (staging)"
+            echo "- **release now at:** \`$(git rev-parse --short HEAD)\`"
+            echo ""
+            echo "Vercel will pick up the push to \`release\` and deploy production."
+          } >> "$GITHUB_STEP_SUMMARY"

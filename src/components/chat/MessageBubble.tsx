@@ -1,4 +1,4 @@
-import { MapPin } from 'lucide-react';
+import { Download, FileText, MapPin } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { formatShortTime, whatsappToJsx } from '@/lib/whatsapp';
@@ -23,8 +23,16 @@ const MediaContent = ({ type, url, caption }: { type: string; url: string; capti
     {type === 'video' && <video src={url} controls className="max-h-64 rounded-lg" />}
     {type === 'audio' && <audio src={url} controls className="w-64 max-w-full" />}
     {type === 'document' && (
-      <a href={url} target="_blank" rel="noreferrer" download className="underline">
-        {caption || 'Download file'}
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        download
+        className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 hover:bg-muted"
+      >
+        <FileText className="size-5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">{caption || 'Document'}</span>
+        <Download className="size-4 shrink-0 text-muted-foreground" />
       </a>
     )}
     {caption && type !== 'document' && <span className="whitespace-pre-wrap">{whatsappToJsx(caption)}</span>}
