@@ -13,7 +13,7 @@ vi.mock('@/services/branding', () => ({
   isWebChannelEnabled: () => false,
   getBranding: () => ({
     enabled: false,
-    display_name: 'Yein Udaan',
+    display_name: 'Switched Off NGO',
     whatsapp_number: '919876543210',
     logo_url: null,
     primary_color: '#119656',
@@ -30,9 +30,9 @@ describe('<WebChannelDisabled />', () => {
   it('names the organisation and points the contact at WhatsApp instead', () => {
     render(<WebChannelDisabled />);
 
-    expect(screen.getByTestId('disabledOrgName')).toHaveTextContent('Yein Udaan');
+    expect(screen.getByTestId('disabledOrgName')).toHaveTextContent('Switched Off NGO');
     expect(screen.getByTestId('webChannelDisabled')).toHaveTextContent(
-      'Yein Udaan has not enabled messaging through browser.'
+      'Switched Off NGO has not enabled messaging through browser.'
     );
     expect(screen.getByTestId('whatsappLink')).toHaveAttribute('href', 'https://wa.me/919876543210');
   });

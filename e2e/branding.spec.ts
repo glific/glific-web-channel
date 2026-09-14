@@ -115,11 +115,11 @@ test.describe('per-org theming', () => {
   // A switched-off channel is a settled state rather than a transient one, so something renders
   // — the disabled page, on the default palette, with no way to sign in.
   test('renders the disabled page when the org has the web channel switched off', async ({ page }) => {
-    await serveBrandingDisabled(page, 'Yein Udaan');
+    await serveBrandingDisabled(page, 'Dormant NGO');
 
     await page.goto('/login');
 
-    await expect(page.getByTestId('disabledOrgName')).toHaveText('Yein Udaan');
+    await expect(page.getByTestId('disabledOrgName')).toHaveText('Dormant NGO');
     await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
     // No logo and no monogram: the name is what identifies the org here.
     await expect(page.getByTestId('orgLogo')).toHaveCount(0);
