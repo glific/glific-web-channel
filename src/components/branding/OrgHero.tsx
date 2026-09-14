@@ -37,7 +37,7 @@ export const OrgHero = ({ leading, subtitle, logoSize = 96, className }: OrgHero
       </h1>
 
       {caption && (
-        <p className="mt-1 line-clamp-2 text-sm text-primary-foreground/80" data-testid="orgCaption">
+        <p className="mt-1 line-clamp-2 text-sm text-primary-foreground" data-testid="orgCaption">
           {caption}
         </p>
       )}

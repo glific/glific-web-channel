@@ -30,16 +30,20 @@ export interface Branding {
 
 const EMPTY_ABOUT: OrgAbout = { description: null, address: null, website: null, email: null, hours: null };
 
-// Glific's own green and amber. Used only when the org is reachable but has set nothing, and for
-// the disabled case where the banner carries the explanation. A branding fetch that *fails* does
-// not fall back — see BrandingStatus below.
+// Glific's own green and amber. Used when a payload leaves a field out, and when the org is
+// reachable but has set nothing. A branding fetch that *fails* does not fall back — see
+// BrandingStatus below.
+//
+// The foreground is the DARK neutral, because that is what the server's readable_on/1 returns for
+// this green: the light one lands at 3.6:1 against it. A fallback that fails the contrast the
+// server guarantees would be the one palette nobody checks.
 const FALLBACK_BRANDING: Branding = {
   enabled: true,
   display_name: 'Glific',
   whatsapp_number: null,
   logo_url: null,
   primary_color: '#119656',
-  primary_foreground: '#fafafa',
+  primary_foreground: '#18181b',
   secondary_color: '#eab308',
   about: EMPTY_ABOUT,
 };

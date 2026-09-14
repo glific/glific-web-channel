@@ -101,6 +101,26 @@ describe('applyBranding', () => {
   });
 });
 
+// The server computes primary_foreground for a real org, but nothing computes the fallback — so
+// it is asserted here, against the same 4.5:1 bar readable_on/1 is held to.
+describe('the fallback palette', () => {
+  const luminance = (hex: string) =>
+    [1, 3, 5]
+      .map((at) => parseInt(hex.slice(at, at + 2), 16) / 255)
+      .map((channel) => (channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
+      .reduce((total, channel, index) => total + [0.2126, 0.7152, 0.0722][index] * channel, 0);
+
+  it('clears WCAG AA, like every palette the server hands out', async () => {
+    mockedAxios.get.mockRejectedValue({ response: { status: 404 } });
+    await loadBranding();
+    const { primary_color: primary, primary_foreground: foreground } = getBranding();
+
+    const [lighter, darker] = [luminance(primary), luminance(foreground)].sort((a, b) => b - a);
+
+    expect((lighter + 0.05) / (darker + 0.05)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 describe('hasOrgProfile', () => {
   it('is false when the org has published nothing, so no empty panel is offered', () => {
     expect(hasOrgProfile(EMPTY_ABOUT)).toBe(false);
