@@ -241,6 +241,38 @@ test.describe('when an attachment fails', () => {
   });
 });
 
+test.describe('the organisation details', () => {
+  // Reaching them should not require finding the menu first: the name and mark in the header are
+  // the obvious thing to press, and on WhatsApp they are what opens contact info.
+  test('the header opens them, and closing comes back to the chat', async ({ page }) => {
+    await openChat(page);
+
+    await page.getByTestId('orgDetailsButton').click();
+
+    await expect(page.getByTestId('webChannelAbout')).toBeVisible();
+    await expect(page.getByTestId('about-address')).toContainText(DARK_ACCENT_ORG.about.address!);
+
+    await page.getByTestId('aboutBack').click();
+
+    await expect(page.getByTestId('webChannelChat')).toBeVisible();
+    // Whichever way they were opened, closing lands on the chat with nothing over it.
+    await expect(page.getByTestId('chatMenu')).toHaveCount(0);
+  });
+
+  test('the menu opens them too, and leaves nothing behind on the way back', async ({ page }) => {
+    await openChat(page);
+
+    await page.getByTestId('chatMenuButton').click();
+    await page.getByTestId('menuAbout').click();
+    await expect(page.getByTestId('webChannelAbout')).toBeVisible();
+
+    await page.getByTestId('aboutBack').click();
+
+    await expect(page.getByTestId('webChannelChat')).toBeVisible();
+    await expect(page.getByTestId('chatMenu')).toHaveCount(0);
+  });
+});
+
 test.describe('sharing a location', () => {
   test.use({ geolocation: { latitude: 12.9716, longitude: 77.5946 }, permissions: ['geolocation'] });
 

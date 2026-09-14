@@ -232,15 +232,25 @@ export const Chat = () => {
   return (
     <div className="mx-auto flex h-[100svh] w-full max-w-2xl flex-col bg-background" data-testid="webChannelChat">
       <header className="flex items-center gap-3 bg-primary px-4 py-3 text-primary-foreground">
-        <Logo size={44} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-bold" data-testid="orgName">
-            {branding.display_name}
+        {/* The whole identity block, the way WhatsApp opens contact info — a 44px mark and two
+            lines of text make a far better thumb target than any icon added beside them. */}
+        <button
+          type="button"
+          aria-label={`About ${branding.display_name}`}
+          data-testid="orgDetailsButton"
+          onClick={() => navigate('/about')}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:opacity-90"
+        >
+          <Logo size={44} />
+          <div className="min-w-0">
+            <div className="truncate font-bold" data-testid="orgName">
+              {branding.display_name}
+            </div>
+            <div className="text-xs text-primary-foreground" data-testid="connectionStatus">
+              {CONNECTION_LABELS[connectionState]}
+            </div>
           </div>
-          <div className="text-xs text-primary-foreground" data-testid="connectionStatus">
-            {CONNECTION_LABELS[connectionState]}
-          </div>
-        </div>
+        </button>
         <button
           type="button"
           aria-label="Menu"
@@ -258,7 +268,10 @@ export const Chat = () => {
         orgName={branding.display_name}
         contactName={contact?.name}
         contactPhone={contact?.phone}
-        onAbout={() => navigate('/about')}
+        onAbout={() => {
+          setMenuOpen(false);
+          navigate('/about');
+        }}
         onLogout={handleLogout}
       />
 

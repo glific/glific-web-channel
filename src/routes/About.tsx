@@ -12,7 +12,10 @@ export const About = () => {
   const { display_name: displayName, about } = getBranding();
 
   return (
-    <div className="mx-auto flex min-h-[100svh] w-full max-w-md flex-col bg-background" data-testid="webChannelAbout">
+    <div
+      className="mx-auto flex min-h-[100svh] w-full max-w-md flex-col bg-background animate-in slide-in-from-right duration-200 motion-reduce:animate-none"
+      data-testid="webChannelAbout"
+    >
       {/* No caption: the description belongs to the profile below, and repeating it in the band
           above would say the same thing twice on the one screen that exists to show it. */}
       <OrgHero
@@ -20,9 +23,11 @@ export const About = () => {
         leading={
           <button
             type="button"
-            aria-label="Back"
+            aria-label="Back to chat"
             data-testid="aboutBack"
-            onClick={() => navigate(-1)}
+            // Not navigate(-1): this screen is reachable from the header, from the menu and by
+            // its own URL, and only one of those has a chat behind it to go back to.
+            onClick={() => navigate('/chat')}
             className="rounded-full p-1 text-primary-foreground hover:bg-white/10"
           >
             <ChevronLeft className="size-6" />

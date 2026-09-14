@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { clearWebChannelSession } from '@/services/webChannelAuth';
 import { uploadMedia } from '@/services/webChannelMedia';
 import { pushNewMediaMessage, pushNewLocationMessage } from '@/services/webChannelSocket';
 import { Chat } from './Chat';
+import { About } from './About';
 
 vi.mock('@/services/webChannelAuth', () => ({
   getWebChannelContact: () => ({ contactId: 1, name: 'Priya', phone: '+919820198765' }),
@@ -14,13 +15,14 @@ vi.mock('@/services/webChannelAuth', () => ({
 }));
 
 vi.mock('@/services/branding', () => ({
+  hasOrgProfile: (about: Record<string, unknown>) => Object.values(about).some(Boolean),
   getBranding: () => ({
     display_name: 'Test NGO',
     logo_url: null,
     primary_color: '#119656',
     primary_foreground: '#fafafa',
     secondary_color: '#eab308',
-    about: { description: null, address: null, website: null, email: null, hours: null },
+    about: { description: null, address: 'Bengaluru, Karnataka', website: null, email: null, hours: null },
   }),
 }));
 
@@ -277,6 +279,19 @@ describe('<Chat /> media, voice and location composers', () => {
   });
 });
 
+// The navigation cases need somewhere to navigate to; the rest of this suite renders Chat alone.
+const renderRouted = async () => {
+  render(
+    <MemoryRouter initialEntries={['/chat']}>
+      <Routes>
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/about" element={<About />} />
+      </Routes>
+    </MemoryRouter>
+  );
+  await screen.findByTestId('composerInput');
+};
+
 describe('the chat header and menu', () => {
   // The contact is chatting WITH the organisation, so the header carries the org's name and the
   // channel's presence — not the contact's own name, which they already know.
@@ -285,6 +300,30 @@ describe('the chat header and menu', () => {
 
     expect(screen.getByTestId('orgName')).toHaveTextContent('Test NGO');
     expect(screen.getByTestId('connectionStatus')).toHaveTextContent('online');
+  });
+
+  // The whole identity block, the way WhatsApp opens contact info — reaching the organisation's
+  // details should not require finding the menu first.
+  it('opens the organisation details from the name and mark in the header', async () => {
+    await renderRouted();
+
+    fireEvent.click(screen.getByTestId('orgDetailsButton'));
+
+    expect(await screen.findByTestId('webChannelAbout')).toBeInTheDocument();
+    expect(screen.queryByTestId('webChannelChat')).not.toBeInTheDocument();
+  });
+
+  it('comes back to the chat on close, with the menu shut', async () => {
+    await renderRouted();
+
+    fireEvent.click(screen.getByTestId('chatMenuButton'));
+    fireEvent.click(screen.getByTestId('menuAbout'));
+    expect(await screen.findByTestId('webChannelAbout')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('aboutBack'));
+
+    expect(await screen.findByTestId('webChannelChat')).toBeInTheDocument();
+    expect(screen.queryByTestId('chatMenu')).not.toBeInTheDocument();
   });
 
   it('shows the contact their own profile, read-only', async () => {
