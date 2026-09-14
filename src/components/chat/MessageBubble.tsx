@@ -141,7 +141,7 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
         <span
           className={cn(
             'mt-1 block text-right text-[0.65rem] tabular-nums',
-            isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            isSent ? 'text-primary-foreground' : 'text-muted-foreground'
           )}
           data-testid="date"
         >

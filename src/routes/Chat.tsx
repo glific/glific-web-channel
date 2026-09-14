@@ -237,7 +237,7 @@ export const Chat = () => {
           <div className="truncate font-bold" data-testid="orgName">
             {branding.display_name}
           </div>
-          <div className="text-xs text-primary-foreground/75" data-testid="connectionStatus">
+          <div className="text-xs text-primary-foreground" data-testid="connectionStatus">
             {CONNECTION_LABELS[connectionState]}
           </div>
         </div>

@@ -23,7 +23,7 @@ export const About = () => {
             aria-label="Back"
             data-testid="aboutBack"
             onClick={() => navigate(-1)}
-            className="rounded-full p-1 text-primary-foreground/90 hover:bg-white/10"
+            className="rounded-full p-1 text-primary-foreground hover:bg-white/10"
           >
             <ChevronLeft className="size-6" />
           </button>
