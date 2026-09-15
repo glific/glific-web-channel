@@ -10,6 +10,7 @@ import {
   WEB_CHANNEL_TOKEN_REFRESH_INTERVAL_MS,
 } from '@/config';
 import { getWebChannelSession, setWebChannelSession } from '@/services/webChannelAuth';
+import { isWebChannelEnabled } from '@/services/branding';
 import { tokenExpiringIn } from '@/test/token';
 import { useSessionRefresh } from './useSessionRefresh';
 
@@ -323,6 +324,19 @@ describe('useSessionRefresh', () => {
 
     expect(await screen.findByText('LOGIN SCREEN')).toBeInTheDocument();
     expect(getWebChannelSession()).toBeNull();
+  });
+
+  // Switching the channel off has to end the conversation in every open browser, not only stop
+  // new ones starting: the contact's token is still valid and would otherwise let them straight
+  // back in on the next navigation.
+  it('signs the contact out and marks the channel off when the server pushes web_channel_disabled', async () => {
+    renderWithSession(tokenExpiringIn(FORTY_MINUTES));
+
+    serverPushes('web_channel_disabled');
+
+    expect(await screen.findByText('LOGIN SCREEN')).toBeInTheDocument();
+    expect(getWebChannelSession()).toBeNull();
+    expect(isWebChannelEnabled()).toBe(false);
   });
 
   it('stops listening for server session pushes once unmounted', async () => {

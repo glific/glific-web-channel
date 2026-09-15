@@ -1,11 +1,13 @@
 import type { ReactElement } from 'react';
-import { Navigate, Route, Routes } from 'react-router';
+import { Navigate, Route, Routes, useLocation } from 'react-router';
 
 import { clearWebChannelSession, getWebChannelToken, isSessionValid } from '@/services/webChannelAuth';
-import { WebChannelDisabledBanner } from '@/components/branding/WebChannelDisabledBanner';
+import { isWebChannelEnabled } from '@/services/branding';
+import { WebChannelDisabled } from '@/components/branding/WebChannelDisabled';
 import { useSessionRefresh } from '@/hooks/useSessionRefresh';
 import { Login } from '@/routes/Login';
 import { Chat } from '@/routes/Chat';
+import { About } from '@/routes/About';
 
 // The guards are COMPONENTS so the token is read when <Routes> renders them. Computing it once in
 // App's body would leave it stale on navigation, trapping the user on /login after a successful
@@ -31,9 +33,14 @@ const RedirectIfAuthed = ({ children }: { children: ReactElement }) =>
 
 // The whole app IS the web channel (dedicated origin, e.g. web.<org>.glific.com), so routes live
 // at the root.
-export const App = () => (
-  <>
-    <WebChannelDisabledBanner />
+export const App = () => {
+  // Subscribes this component to navigation, so switching the channel off mid-session swaps the
+  // whole app for the disabled page on the next navigation rather than on the next reload.
+  useLocation();
+
+  if (!isWebChannelEnabled()) return <WebChannelDisabled />;
+
+  return (
     <Routes>
       <Route
         path="/login"
@@ -51,9 +58,17 @@ export const App = () => (
           </RequireAuth>
         }
       />
+      <Route
+        path="/about"
+        element={
+          <RequireAuth>
+            <About />
+          </RequireAuth>
+        }
+      />
       <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>
-  </>
-);
+  );
+};
 
 export default App;

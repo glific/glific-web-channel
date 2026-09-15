@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { DARK_ACCENT_ORG, serveBranding, serveBrandingNotFound } from './support/branding';
+import { DARK_ACCENT_ORG, serveBranding, serveBrandingDisabled } from './support/branding';
 
 test.describe('the widget loads', () => {
   test('an unauthenticated visitor lands on the login screen', async ({ page }) => {
@@ -17,14 +17,14 @@ test.describe('the widget loads', () => {
   });
 
   test('tells the visitor when this org has not enabled the web channel', async ({ page }) => {
-    await serveBrandingNotFound(page);
+    await serveBrandingDisabled(page);
 
     await page.goto('/');
 
-    // Without this the visitor gets a working-looking login screen that can never authenticate
-    // them, and no indication why.
-    await expect(page.getByTestId('webChannelDisabledBanner')).toBeVisible();
-    await expect(page.getByTestId('webChannelDisabledBanner')).toContainText('not enabled');
+    // A page rather than a banner over the form: the form would take a phone number, send
+    // nothing, and leave the visitor waiting for a code that is never coming.
+    await expect(page.getByTestId('webChannelDisabled')).toBeVisible();
+    await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
   });
 
   // An unreachable backend is neither presented as a disabled channel nor quietly served on the
@@ -40,7 +40,7 @@ test.describe('the widget loads', () => {
     // Neither the login form nor the disabled banner — this is a transient failure, not a
     // settled state, and not a usable app.
     await expect(page.getByTestId('webChannelLogin')).toHaveCount(0);
-    await expect(page.getByTestId('webChannelDisabledBanner')).toHaveCount(0);
+    await expect(page.getByTestId('webChannelDisabled')).toHaveCount(0);
   });
 
   test('retrying recovers once branding is reachable', async ({ page }) => {
@@ -62,6 +62,6 @@ test.describe('the widget loads', () => {
     await page.getByTestId('brandingRetry').click();
 
     await expect(page.getByTestId('webChannelLogin')).toBeVisible();
-    await expect(page.getByText(DARK_ACCENT_ORG.display_name)).toBeVisible();
+    await expect(page.getByTestId('orgName')).toHaveText(DARK_ACCENT_ORG.display_name);
   });
 });

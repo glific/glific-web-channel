@@ -32,8 +32,9 @@ const openChat = async (page: Page, options: Parameters<typeof mockPhoenix>[1] =
 
   await page.goto('/chat');
   await expect(page.getByTestId('webChannelChat')).toBeVisible();
-  // The banner clears only once the join is acknowledged; without waiting, a send races the channel.
-  await expect(page.getByTestId('connectionStatus')).toHaveCount(0);
+  // The header reads "online" only once the join is acknowledged; without waiting, a send races
+  // the channel.
+  await expect(page.getByTestId('connectionStatus')).toHaveText('online');
 
   return socket;
 };
@@ -237,6 +238,38 @@ test.describe('when an attachment fails', () => {
     expect(socket.payloadsFor('new_media_message')).toHaveLength(2);
     expect(signing.count).toBe(1);
     expect(storage.count).toBe(1);
+  });
+});
+
+test.describe('the organisation details', () => {
+  // Reaching them should not require finding the menu first: the name and mark in the header are
+  // the obvious thing to press, and on WhatsApp they are what opens contact info.
+  test('the header opens them, and closing comes back to the chat', async ({ page }) => {
+    await openChat(page);
+
+    await page.getByTestId('orgDetailsButton').click();
+
+    await expect(page.getByTestId('webChannelAbout')).toBeVisible();
+    await expect(page.getByTestId('about-address')).toContainText(DARK_ACCENT_ORG.about.address!);
+
+    await page.getByTestId('aboutBack').click();
+
+    await expect(page.getByTestId('webChannelChat')).toBeVisible();
+    // Whichever way they were opened, closing lands on the chat with nothing over it.
+    await expect(page.getByTestId('chatMenu')).toHaveCount(0);
+  });
+
+  test('the menu opens them too, and leaves nothing behind on the way back', async ({ page }) => {
+    await openChat(page);
+
+    await page.getByTestId('chatMenuButton').click();
+    await page.getByTestId('menuAbout').click();
+    await expect(page.getByTestId('webChannelAbout')).toBeVisible();
+
+    await page.getByTestId('aboutBack').click();
+
+    await expect(page.getByTestId('webChannelChat')).toBeVisible();
+    await expect(page.getByTestId('chatMenu')).toHaveCount(0);
   });
 });
 

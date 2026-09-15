@@ -8,6 +8,22 @@ export interface WebChannelMedia {
   content_type?: string | null;
 }
 
+// An interactive template as Glific stores it. Only the parts the widget renders are typed;
+// `quick_reply` carries its options flat, `list` nests them under sectioned items.
+export interface WebChannelInteractiveOption {
+  title?: string;
+  description?: string;
+}
+
+export interface WebChannelInteractiveContent {
+  type?: 'quick_reply' | 'list' | string;
+  title?: string;
+  body?: string;
+  content?: { text?: string; header?: string };
+  options?: WebChannelInteractiveOption[];
+  items?: { title?: string; subtitle?: string; options?: WebChannelInteractiveOption[] }[];
+}
+
 export interface WebChannelMessage {
   id: number | string;
   body: string;
@@ -17,6 +33,7 @@ export interface WebChannelMessage {
   flow: 'inbound' | 'outbound';
   inserted_at: string;
   media?: WebChannelMedia | null;
+  interactive_content?: WebChannelInteractiveContent | null;
 }
 
 // The media types the server accepts on "new_media_message"
@@ -29,9 +46,10 @@ export interface OutboundMedia {
   caption?: string;
 }
 
-// Server pushes about the credential the channel is holding: "token_expiring" while there is
-// still time to renew, "session_expired" once the channel has been stopped.
-export type WebChannelSessionEvent = 'token_expiring' | 'session_expired';
+// Server pushes that end or extend the session: "token_expiring" while there is still time to
+// renew, "session_expired" once the channel has been stopped, and "web_channel_disabled" when
+// the organisation itself switched the channel off and every room was closed.
+export type WebChannelSessionEvent = 'token_expiring' | 'session_expired' | 'web_channel_disabled';
 
 type SessionEventListener = (event: WebChannelSessionEvent) => void;
 
@@ -110,6 +128,7 @@ export const connectAndJoin = ({ token, contactId, handlers = {} }: ConnectParam
 
   channel.on('token_expiring', () => emitSessionEvent('token_expiring'));
   channel.on('session_expired', () => emitSessionEvent('session_expired'));
+  channel.on('web_channel_disabled', () => emitSessionEvent('web_channel_disabled'));
 
   return new Promise((resolve, reject) => {
     channel
