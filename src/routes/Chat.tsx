@@ -127,7 +127,6 @@ export const Chat = () => {
 
     connectAndJoin({
       token,
-      contactId: contact.contactId,
       handlers: {
         onOpen: () => active && setConnectionState('open'),
         onError: () => active && setConnectionState('reconnecting'),
