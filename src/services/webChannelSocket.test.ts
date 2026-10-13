@@ -91,7 +91,7 @@ describe('webChannelSocket', () => {
     expect(params()).toEqual({ token: 'my-token' });
     expect(mockSocket.connect).toHaveBeenCalled();
     // joined the correct channel topic
-    expect(mockSocket.channel).toHaveBeenCalledWith('web_channel:me', {});
+    expect(mockSocket.channel).toHaveBeenCalledWith('web_channel:conversation', {});
     // wired the new_message listener
     expect(mockChannel.on).toHaveBeenCalledWith('new_message', expect.any(Function));
     // resolved with the initial page

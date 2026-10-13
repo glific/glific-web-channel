@@ -117,7 +117,7 @@ export const connectAndJoin = ({ token, handlers = {} }: ConnectParams): Promise
   socket.connect();
   activeSocket = socket;
 
-  const channel = socket.channel('web_channel:me', {});
+  const channel = socket.channel('web_channel:conversation', {});
 
   if (handlers.onNewMessage) {
     channel.on('new_message', (message: WebChannelMessage) => {
