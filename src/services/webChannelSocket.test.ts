@@ -81,7 +81,6 @@ describe('webChannelSocket', () => {
     const onNewMessage = vi.fn();
     const result = await connectAndJoin({
       token: 'my-token',
-      contactId: 42,
       handlers: { onNewMessage },
     });
 
@@ -92,7 +91,7 @@ describe('webChannelSocket', () => {
     expect(params()).toEqual({ token: 'my-token' });
     expect(mockSocket.connect).toHaveBeenCalled();
     // joined the correct channel topic
-    expect(mockSocket.channel).toHaveBeenCalledWith('web_channel:42', {});
+    expect(mockSocket.channel).toHaveBeenCalledWith('web_channel:conversation', {});
     // wired the new_message listener
     expect(mockChannel.on).toHaveBeenCalledWith('new_message', expect.any(Function));
     // resolved with the initial page
@@ -104,7 +103,7 @@ describe('webChannelSocket', () => {
   it('connectAndJoin rejects when the join replies with error', async () => {
     mockChannel.join.mockReturnValue(makeReceiver({ error: { reason: 'unauthorized' } }));
 
-    await expect(connectAndJoin({ token: 't', contactId: 1 })).rejects.toEqual({ reason: 'unauthorized' });
+    await expect(connectAndJoin({ token: 't' })).rejects.toEqual({ reason: 'unauthorized' });
   });
 
   it('pushNewMessage pushes the body and resolves on ok', async () => {
@@ -177,7 +176,7 @@ describe('webChannelSocket', () => {
   it('exposes the joined channel so the session refresh can renew on it, and forgets it on disconnect', async () => {
     mockChannel.join.mockReturnValue(makeReceiver({ ok: { messages: [] } }));
 
-    await connectAndJoin({ token: 't', contactId: 1 });
+    await connectAndJoin({ token: 't' });
     expect(getActiveChannel()).toBe(mockChannel);
 
     disconnect(mockSocket as any, mockChannel as any);
@@ -189,7 +188,7 @@ describe('webChannelSocket', () => {
     const listener = vi.fn();
     const unsubscribe = onWebChannelSessionEvent(listener);
 
-    await connectAndJoin({ token: 't', contactId: 1 });
+    await connectAndJoin({ token: 't' });
     fireServerPush('token_expiring');
     fireServerPush('session_expired');
 
@@ -205,7 +204,7 @@ describe('webChannelSocket', () => {
     const join = makeHeldReceiver();
     mockChannel.join.mockReturnValue(join.chain);
 
-    const connecting = connectAndJoin({ token: 't', contactId: 1 });
+    const connecting = connectAndJoin({ token: 't' });
     join.reply('error', { reason: 'unauthorized' });
     await expect(connecting).rejects.toEqual({ reason: 'unauthorized' });
 
@@ -226,7 +225,7 @@ describe('webChannelSocket', () => {
     mockChannel.push.mockReturnValue(makeReceiver({ ok: {} }));
     localStorage.setItem('web_channel_session', JSON.stringify({ token: 'token-at-connect', contactId: 1 }));
 
-    const connecting = connectAndJoin({ token: 'token-at-connect', contactId: 1 });
+    const connecting = connectAndJoin({ token: 'token-at-connect' });
     join.reply('ok', { messages: [] });
     await connecting;
     expect(mockChannel.push).not.toHaveBeenCalled();
@@ -247,7 +246,7 @@ describe('webChannelSocket', () => {
     );
 
     mockChannel.join.mockReturnValue(makeReceiver({ ok: { messages: [] } }));
-    await connectAndJoin({ token: 'token-at-mount', contactId: 42 });
+    await connectAndJoin({ token: 'token-at-mount' });
     const params = SocketMock.mock.calls[0][1].params as () => { token: string | null };
     expect(params()).toEqual({ token: 'token-at-mount' });
 

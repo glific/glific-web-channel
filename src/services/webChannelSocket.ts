@@ -64,7 +64,6 @@ export interface ConnectHandlers {
 
 export interface ConnectParams {
   token: string;
-  contactId: number | string;
   handlers?: ConnectHandlers;
 }
 
@@ -94,9 +93,9 @@ export const onWebChannelSessionEvent = (listener: SessionEventListener): (() =>
 const emitSessionEvent = (event: WebChannelSessionEvent) =>
   sessionEventListeners.forEach((listener) => listener(event));
 
-// Open the phoenix socket, join the contact's channel and resolve with the initial messages.
+// Open the phoenix socket, join the contact's own channel and resolve with the initial messages.
 // The phoenix client provides auto-reconnect + heartbeats out of the box.
-export const connectAndJoin = ({ token, contactId, handlers = {} }: ConnectParams): Promise<WebChannelConnection> => {
+export const connectAndJoin = ({ token, handlers = {} }: ConnectParams): Promise<WebChannelConnection> => {
   // A function, not a value: phoenix re-evaluates params on every connect attempt. A captured
   // token would make any auto-reconnect after a renewal retry forever with the replaced one,
   // surfacing as a permanent "Reconnecting…" rather than an auth failure.
@@ -118,7 +117,7 @@ export const connectAndJoin = ({ token, contactId, handlers = {} }: ConnectParam
   socket.connect();
   activeSocket = socket;
 
-  const channel = socket.channel(`web_channel:${contactId}`, {});
+  const channel = socket.channel('web_channel:conversation', {});
 
   if (handlers.onNewMessage) {
     channel.on('new_message', (message: WebChannelMessage) => {
