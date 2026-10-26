@@ -170,7 +170,7 @@ describe('<Login />', () => {
     expect(screen.queryByText('Enter the 6-digit code')).not.toBeInTheDocument();
   });
 
-  it('verifies the OTP and stores the web-channel session', async () => {
+  it('verifies the OTP with the consent and stores the web-channel session', async () => {
     renderLogin();
     await goToOtpStep();
 
@@ -180,6 +180,7 @@ describe('<Login />', () => {
       expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_VERIFY_OTP, {
         phone: '+919999999999',
         otp: '123456',
+        optin: true,
       })
     );
     await waitFor(() => expect(screen.getByText('Chat Window')).toBeInTheDocument());

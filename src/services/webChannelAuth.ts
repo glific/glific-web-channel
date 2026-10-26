@@ -41,7 +41,9 @@ export const clearWebChannelSession = (): void => {
 // delivery succeeded — the neutrality stops the endpoint enumerating an NGO's beneficiaries.
 export const requestOtp = (phone: string) => axios.post(WEB_CHANNEL_REQUEST_OTP, { phone });
 
-export const verifyOtp = (phone: string, otp: string) => axios.post(WEB_CHANNEL_VERIFY_OTP, { phone, otp });
+// `optin` is the consent checkbox: the backend records the user's web opt-in only when it is sent.
+export const verifyOtp = (phone: string, otp: string, optin: boolean) =>
+  axios.post(WEB_CHANNEL_VERIFY_OTP, { phone, otp, optin });
 
 // Same body shape as verify-otp, so a success goes straight to setWebChannelSession. 401 once the
 // current token has expired: this renews, it does not re-authenticate.
