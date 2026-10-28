@@ -4,7 +4,7 @@ import { MapPin, Mic, MoreVertical, Paperclip, Send, Trash2, X } from 'lucide-re
 import type { Channel, Socket } from 'phoenix';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ComposerInput } from '@/components/chat/ComposerInput';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ChatMenu } from '@/components/chat/ChatMenu';
 import { Logo } from '@/components/branding/Logo';
@@ -338,7 +338,7 @@ export const Chat = () => {
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-end gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -384,17 +384,11 @@ export const Chat = () => {
                 <Mic />
               </Button>
             )}
-            <Input
+            <ComposerInput
               value={draft}
               placeholder={media.pending ? 'Add a caption' : 'Type a message'}
-              data-testid="composerInput"
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
+              onChange={setDraft}
+              onSubmit={handleSend}
             />
             <Button
               size="icon"
