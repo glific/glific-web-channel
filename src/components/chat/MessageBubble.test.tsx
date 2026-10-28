@@ -63,6 +63,19 @@ describe('<MessageBubble />', () => {
     expect(screen.getByTestId('locationContent')).toHaveAttribute('href', maps);
   });
 
+  // Bubbles stay white or grey whatever the org's colour, so a light brand colour can never make
+  // a message hard to read. The bubble is the content's parent; its classes carry the colour.
+  it.each([
+    ['inbound', 'the contact sent', 'bg-muted'],
+    ['outbound', 'the organisation sent', 'bg-card'],
+  ])('paints a message %s (%s) %s, never the brand colour', (flow, _who, fill) => {
+    render(<MessageBubble message={message({ body: 'hello', type: 'TEXT', flow })} />);
+
+    const bubble = screen.getByTestId('content').parentElement as HTMLElement;
+    expect(bubble).toHaveClass(fill);
+    expect(bubble.className).not.toMatch(/\b(bg-primary|bg-brand)\b/);
+  });
+
   describe('interactive messages', () => {
     const quickReply = {
       type: 'quick_reply',

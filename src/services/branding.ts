@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 import { WEB_CHANNEL_BRANDING } from '@/config';
+import { ON_ACTION, readableShade } from '@/lib/colour';
 import { initialsFor } from '@/lib/initials';
 
 /** The read-only business profile, the web equivalent of a WhatsApp business profile. */
@@ -12,7 +13,7 @@ export interface OrgAbout {
   hours: string | null;
 }
 
-/** Branding = the org's two colours + logo + name + the business profile. */
+/** Branding = the org's colour + logo + name + the business profile. */
 export interface Branding {
   /** False when the org has the web channel switched off; the rest is then defaults. */
   enabled: boolean;
@@ -23,8 +24,6 @@ export interface Branding {
   primary_color: string;
   /** Computed server-side to stay legible on `primary_color`; never chosen by an admin. */
   primary_foreground: string;
-  /** Decorative only — chip borders, selected rings, trust accents. Never behind text. */
-  secondary_color: string;
   about: OrgAbout;
 }
 
@@ -44,7 +43,6 @@ const FALLBACK_BRANDING: Branding = {
   logo_url: null,
   primary_color: '#119656',
   primary_foreground: '#18181b',
-  secondary_color: '#eab308',
   about: EMPTY_ABOUT,
 };
 
@@ -145,17 +143,20 @@ const applyFavicon = (next: Branding): void => {
  * The colours override the *raw* custom properties. The `--color-*` aliases are compiled through
  * Tailwind's `@theme inline`, so setting those at runtime would have no effect.
  *
- * `--secondary` is left alone: in shadcn it is a surface colour with its own foreground, and
- * repainting it with a decorative accent would put brand-coloured text on brand-coloured
- * buttons. The decorative colour gets a var of its own instead.
+ * The org's own colour goes on `--brand`, and only the header paints with it, under the
+ * foreground the server computed for it. `--primary` — buttons, links, focus rings — gets a shade
+ * of it dark enough to carry light text and to read as text on the white page, so a light brand
+ * colour never produces an unreadable button or link.
  */
 export const applyBranding = (next: Branding): void => {
   const root = document.documentElement;
+  const shade = readableShade(next.primary_color);
 
-  root.style.setProperty('--primary', next.primary_color);
-  root.style.setProperty('--primary-foreground', next.primary_foreground);
-  root.style.setProperty('--brand-accent', next.secondary_color);
-  root.style.setProperty('--ring', next.primary_color);
+  root.style.setProperty('--brand', next.primary_color);
+  root.style.setProperty('--brand-foreground', next.primary_foreground);
+  root.style.setProperty('--primary', shade);
+  root.style.setProperty('--primary-foreground', ON_ACTION);
+  root.style.setProperty('--ring', shade);
 
   document.title = next.enabled ? `${next.display_name} — Chat` : next.display_name;
   applyFavicon(next);

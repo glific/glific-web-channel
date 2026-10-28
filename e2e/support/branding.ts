@@ -7,7 +7,6 @@ export interface OrgBranding {
   logo_url: string | null;
   primary_color: string;
   primary_foreground: string;
-  secondary_color: string;
   about: {
     description: string | null;
     address: string | null;
@@ -66,7 +65,6 @@ export const DARK_ACCENT_ORG: OrgBranding = {
   logo_url: 'https://cdn.example.org/violet.svg',
   primary_color: '#5b21b6',
   primary_foreground: '#fafafa',
-  secondary_color: '#eab308',
   about: {
     description: 'Violet NGO runs after-school programmes.',
     address: 'Mumbai, Maharashtra',
@@ -83,7 +81,6 @@ export const LIGHT_ACCENT_ORG: OrgBranding = {
   logo_url: 'https://cdn.example.org/amber.svg',
   primary_color: '#ffb900',
   primary_foreground: '#18181b',
-  secondary_color: '#5b21b6',
   about: {
     description: null,
     address: null,

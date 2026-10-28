@@ -25,7 +25,7 @@ export const OrgHero = ({ leading, subtitle, logoSize = 96, className }: OrgHero
 
   return (
     <header
-      className={cn('relative bg-primary px-6 pt-10 pb-8 text-center text-primary-foreground', className)}
+      className={cn('relative bg-brand px-6 pt-10 pb-8 text-center text-brand-foreground', className)}
       data-testid="orgHero"
     >
       {leading && <div className="absolute top-6 left-4">{leading}</div>}
@@ -37,7 +37,7 @@ export const OrgHero = ({ leading, subtitle, logoSize = 96, className }: OrgHero
       </h1>
 
       {caption && (
-        <p className="mt-1 line-clamp-2 text-sm text-primary-foreground" data-testid="orgCaption">
+        <p className="mt-1 line-clamp-2 text-sm text-brand-foreground" data-testid="orgCaption">
           {caption}
         </p>
       )}
