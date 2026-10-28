@@ -41,6 +41,45 @@ const openChat = async (page: Page, options: Parameters<typeof mockPhoenix>[1] =
 
 const attach = (page: Page, file: typeof PNG_FIXTURE) => page.getByTestId('fileInput').setInputFiles(file);
 
+// Measured in the browser: the field's height comes from layout, which jsdom does not do.
+test.describe('the message field', () => {
+  const height = (page: Page) =>
+    page.getByTestId('composerInput').evaluate((field) => field.getBoundingClientRect().height);
+
+  test('grows with long text, up to six lines, then scrolls within itself', async ({ page }) => {
+    await openChat(page);
+    const composer = page.getByTestId('composerInput');
+    const empty = await height(page);
+
+    await composer.fill('We live in a 2BHK on the third floor with a small balcony. No other pets right now.');
+    const twoOrThreeLines = await height(page);
+    expect(twoOrThreeLines).toBeGreaterThan(empty * 1.5);
+
+    await composer.fill(Array.from({ length: 12 }, (_, line) => `Line ${line + 1}`).join('\n'));
+    const capped = await height(page);
+    const lineHeight = await composer.evaluate((field) => parseFloat(getComputedStyle(field).lineHeight));
+    expect(capped).toBeLessThanOrEqual(lineHeight * 6 + empty - lineHeight + 1);
+    expect(capped).toBeGreaterThan(lineHeight * 5);
+    expect(await composer.evaluate((field) => field.scrollHeight > field.clientHeight)).toBe(true);
+    await expect(composer).toHaveCSS('overflow-y', 'auto');
+
+    // Back to one line once the message is sent and the field clears.
+    await page.getByTestId('sendButton').click();
+    await expect(composer).toHaveValue('');
+    expect(await height(page)).toBe(empty);
+  });
+
+  // The buttons stay on the bottom line, next to where the cursor is, as the field grows.
+  test('keeps the send button level with the bottom of a grown field', async ({ page }) => {
+    await openChat(page);
+    await page.getByTestId('composerInput').fill(Array.from({ length: 4 }, () => 'A long line of text').join('\n'));
+
+    const field = (await page.getByTestId('composerInput').boundingBox())!;
+    const send = (await page.getByTestId('sendButton').boundingBox())!;
+    expect(Math.abs(field.y + field.height - (send.y + send.height))).toBeLessThan(8);
+  });
+});
+
 test.describe('sending a text message', () => {
   test('the message goes on the wire and appears in the conversation', async ({ page }) => {
     const socket = await openChat(page);
@@ -62,13 +101,41 @@ test.describe('sending a text message', () => {
     await expect(page.getByTestId('composerInput')).toHaveValue('');
   });
 
-  test('Enter sends without reaching for the button', async ({ page }) => {
+  test('Enter sends without reaching for the button, on a keyboard', async ({ page }, testInfo) => {
+    test.skip(!!testInfo.project.use.hasTouch, 'on a phone Enter starts a new line instead');
     const socket = await openChat(page);
 
     await page.getByTestId('composerInput').fill('Sent with the keyboard');
     await page.getByTestId('composerInput').press('Enter');
 
     expect(await socket.waitForPush('new_message')).toEqual({ body: 'Sent with the keyboard' });
+  });
+
+  // A phone keyboard has no Shift+Enter, so its Enter key is the only way to break a line.
+  test('Enter starts a new line on a phone, and the send button sends', async ({ page }, testInfo) => {
+    test.skip(!testInfo.project.use.hasTouch, 'with a keyboard Enter sends');
+    const socket = await openChat(page);
+    const composer = page.getByTestId('composerInput');
+
+    await composer.fill('First line');
+    await composer.press('Enter');
+    await composer.pressSequentially('Second line');
+    await expect(composer).toHaveValue('First line\nSecond line');
+
+    await page.getByTestId('sendButton').click();
+    expect(await socket.waitForPush('new_message')).toEqual({ body: 'First line\nSecond line' });
+  });
+
+  test('Shift+Enter starts a new line without sending', async ({ page }) => {
+    await openChat(page);
+    const composer = page.getByTestId('composerInput');
+
+    await composer.fill('First line');
+    await composer.press('Shift+Enter');
+    await composer.pressSequentially('Second line');
+
+    await expect(composer).toHaveValue('First line\nSecond line');
+    await expect(page.getByTestId('webChannelMessage')).toHaveCount(0);
   });
 
   // Whitespace would reach the server as an empty message and render as an empty bubble.

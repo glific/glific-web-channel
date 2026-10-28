@@ -4,7 +4,7 @@ import { MapPin, Mic, MoreVertical, Paperclip, Send, Trash2, X } from 'lucide-re
 import type { Channel, Socket } from 'phoenix';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ComposerInput } from '@/components/chat/ComposerInput';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ChatMenu } from '@/components/chat/ChatMenu';
 import { Logo } from '@/components/branding/Logo';
@@ -230,7 +230,7 @@ export const Chat = () => {
 
   return (
     <div className="mx-auto flex h-[100svh] w-full max-w-2xl flex-col bg-background" data-testid="webChannelChat">
-      <header className="flex items-center gap-3 bg-primary px-4 py-3 text-primary-foreground">
+      <header className="flex items-center gap-3 bg-brand px-4 py-3 text-brand-foreground">
         {/* The whole identity block, the way WhatsApp opens contact info — a 44px mark and two
             lines of text make a far better thumb target than any icon added beside them. */}
         <button
@@ -245,7 +245,7 @@ export const Chat = () => {
             <div className="truncate font-bold" data-testid="orgName">
               {branding.display_name}
             </div>
-            <div className="text-xs text-primary-foreground" data-testid="connectionStatus">
+            <div className="text-xs text-brand-foreground" data-testid="connectionStatus">
               {CONNECTION_LABELS[connectionState]}
             </div>
           </div>
@@ -338,7 +338,7 @@ export const Chat = () => {
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-end gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -384,17 +384,11 @@ export const Chat = () => {
                 <Mic />
               </Button>
             )}
-            <Input
+            <ComposerInput
               value={draft}
               placeholder={media.pending ? 'Add a caption' : 'Type a message'}
-              data-testid="composerInput"
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
+              onChange={setDraft}
+              onSubmit={handleSend}
             />
             <Button
               size="icon"

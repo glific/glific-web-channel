@@ -2,6 +2,7 @@ import axios from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { WEB_CHANNEL_BRANDING } from '@/config';
+import { ON_ACTION, readableShade } from '@/lib/colour';
 import { applyBranding, fetchBranding, getBranding, hasOrgProfile, isWebChannelEnabled, loadBranding } from './branding';
 
 vi.mock('axios');
@@ -16,7 +17,6 @@ const ORG = {
   logo_url: 'https://cdn.example.org/logo.png',
   primary_color: '#4c3bcf',
   primary_foreground: '#fafafa',
-  secondary_color: '#ff8a3d',
   about: { ...EMPTY_ABOUT, address: 'Mumbai, Maharashtra' },
 };
 
@@ -27,30 +27,49 @@ describe('applyBranding', () => {
     document.title = '';
   });
 
-  it('overrides the raw --primary vars, not the @theme inline --color-* aliases', () => {
+  it('overrides the raw vars, not the @theme inline --color-* aliases', () => {
     applyBranding(ORG);
 
     const root = document.documentElement.style;
-    expect(root.getPropertyValue('--primary')).toBe(ORG.primary_color);
-    expect(root.getPropertyValue('--primary-foreground')).toBe(ORG.primary_foreground);
+    expect(root.getPropertyValue('--brand')).toBe(ORG.primary_color);
     // These are compiled through @theme inline, so setting them at runtime does nothing.
+    expect(root.getPropertyValue('--color-brand')).toBe('');
     expect(root.getPropertyValue('--color-primary')).toBe('');
   });
 
-  // shadcn's --secondary is a surface colour with its own foreground. Repainting it would put
-  // brand-coloured text on brand-coloured buttons, so the decorative colour gets its own var.
-  it('puts the decorative colour on --brand-accent and leaves --secondary alone', () => {
-    applyBranding(ORG);
-
-    const root = document.documentElement.style;
-    expect(root.getPropertyValue('--brand-accent')).toBe(ORG.secondary_color);
-    expect(root.getPropertyValue('--secondary')).toBe('');
-  });
-
-  it('takes the server at its word on the foreground, both light and dark', () => {
+  // Only the header paints with the org's own colour, so that is where the server's foreground goes.
+  it('puts the org colour and the server foreground on --brand, both light and dark', () => {
     applyBranding({ ...ORG, primary_color: '#ffb900', primary_foreground: '#18181b' });
 
-    expect(document.documentElement.style.getPropertyValue('--primary-foreground')).toBe('#18181b');
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue('--brand')).toBe('#ffb900');
+    expect(root.getPropertyValue('--brand-foreground')).toBe('#18181b');
+  });
+
+  // Buttons and links: a light colour like amber would put light text on a light fill.
+  it('gives buttons and links a darker shade of a light colour, with light text on it', () => {
+    applyBranding({ ...ORG, primary_color: '#ffb900', primary_foreground: '#18181b' });
+
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue('--primary')).toBe(readableShade('#ffb900'));
+    expect(root.getPropertyValue('--primary')).not.toBe('#ffb900');
+    expect(root.getPropertyValue('--primary-foreground')).toBe(ON_ACTION);
+    expect(root.getPropertyValue('--ring')).toBe(root.getPropertyValue('--primary'));
+  });
+
+  it('keeps a colour that is already dark enough for buttons and links as it is', () => {
+    applyBranding(ORG);
+
+    expect(document.documentElement.style.getPropertyValue('--primary')).toBe(ORG.primary_color);
+  });
+
+  // The second colour is gone from the design, and the server still sends it for a while.
+  it('no longer paints a second colour, even if the server still sends one', () => {
+    applyBranding({ ...ORG, secondary_color: '#ff8a3d' } as typeof ORG);
+
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue('--brand-accent')).toBe('');
+    expect(root.getPropertyValue('--secondary')).toBe('');
   });
 
   it('sets the document title from the display name', () => {
@@ -190,7 +209,7 @@ describe('loadBranding', () => {
     await loadBranding();
 
     expect(getBranding()).toEqual(ORG);
-    expect(document.documentElement.style.getPropertyValue('--primary')).toBe(ORG.primary_color);
+    expect(document.documentElement.style.getPropertyValue('--brand')).toBe(ORG.primary_color);
   });
 
   // Deliberately does NOT fall back: a Glific-looking page under an NGO's own domain reads as
@@ -200,6 +219,7 @@ describe('loadBranding', () => {
 
     await expect(loadBranding()).resolves.toBe('unavailable');
 
+    expect(document.documentElement.style.getPropertyValue('--brand')).toBe('');
     expect(document.documentElement.style.getPropertyValue('--primary')).toBe('');
     expect(isWebChannelEnabled()).toBe(true);
   });

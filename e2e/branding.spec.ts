@@ -17,7 +17,7 @@ const AA_NORMAL_TEXT = 4.5;
 // index.css authors this as `oklch(0.205 0 0)` and Tailwind emits it as a percentage, which is
 // what getComputedStyle reports back. Runtime-set values round-trip verbatim instead, so seeing
 // this form means nothing was ever written onto :root.
-const UNTHEMED_PRIMARY = 'oklch(20.5% 0 0)';
+const UNTHEMED_BRAND = 'oklch(20.5% 0 0)';
 
 test.describe('per-org theming', () => {
   // One browser context, one deployment, two tabs — each routed to a different org's /branding.
@@ -39,10 +39,10 @@ test.describe('per-org theming', () => {
       await expect(page.getByTestId('orgName')).toHaveText(org.display_name);
       await expect(page.getByTestId('orgLogo')).toHaveAttribute('src', org.logo_url!);
       await expect(page).toHaveTitle(`${org.display_name} — Chat`);
-      expect(await rootVar(page, '--primary')).toBe(org.primary_color);
+      expect(await rootVar(page, '--brand')).toBe(org.primary_color);
     }
 
-    expect(await rootVar(darkOrg, '--primary')).not.toBe(await rootVar(lightOrg, '--primary'));
+    expect(await rootVar(darkOrg, '--brand')).not.toBe(await rootVar(lightOrg, '--brand'));
   });
 
   // Whatever an org uploads — landscape wordmark, square mark, tall crest — the frame is the
@@ -69,8 +69,8 @@ test.describe('per-org theming', () => {
     await expect(wide.getByTestId('orgLogo')).toHaveCSS('object-fit', 'contain');
   });
 
-  // Amber is deliberately light and Violet deliberately dark, so this covers both directions:
-  // dark text on a pale button, and light text on a saturated one.
+  // Amber is deliberately light and Violet deliberately dark. Buttons take a shade of the org's
+  // colour dark enough for light text, so both have to clear AA — amber only after darkening.
   test('button text stays legible on both a light and a dark theme', async ({ context }) => {
     for (const org of [LIGHT_ACCENT_ORG, DARK_ACCENT_ORG]) {
       const page = await context.newPage();
@@ -90,8 +90,8 @@ test.describe('per-org theming', () => {
     // palette. Wait for something only the render produces before reading :root.
     await expect(prompt.getByTestId('phoneSubmit')).toBeVisible();
 
-    const settled = await rootVar(prompt, '--primary');
-    expect(settled).not.toBe(UNTHEMED_PRIMARY);
+    const settled = await rootVar(prompt, '--brand');
+    expect(settled).not.toBe(UNTHEMED_BRAND);
 
     // Delay /branding well past the point the app would otherwise have painted. Because first
     // paint is held behind the fetch, the accent must already be final the moment anything is
@@ -109,7 +109,7 @@ test.describe('per-org theming', () => {
     await slow.goto('/login', { waitUntil: 'commit' });
 
     await expect(slow.getByTestId('phoneSubmit')).toBeVisible();
-    expect(await rootVar(slow, '--primary')).toBe(settled);
+    expect(await rootVar(slow, '--brand')).toBe(settled);
   });
 
   // A switched-off channel is a settled state rather than a transient one, so something renders
@@ -128,8 +128,8 @@ test.describe('per-org theming', () => {
     // No chat to mark, so the Glific icon from index.html is removed rather than replaced.
     await expect(page.locator('link[rel="icon"]')).toHaveCount(0);
     // Still resolves to a palette — the default one — rather than leaving :root untouched.
-    expect(await rootVar(page, '--primary')).toBe('#119656');
-    expect(await rootVar(page, '--primary')).not.toBe(UNTHEMED_PRIMARY);
+    expect(await rootVar(page, '--brand')).toBe('#119656');
+    expect(await rootVar(page, '--brand')).not.toBe(UNTHEMED_BRAND);
   });
 
   // The widget is a standalone site on the org's own subdomain, so the Glific mark shipped in

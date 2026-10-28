@@ -80,15 +80,15 @@ const InteractiveContent = ({
       {options.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {options.map((option) => (
-            // Bordered in the org's decorative colour, never filled with it: it is chosen for looks
-            // and nothing guarantees a label stays legible on top.
+            // Bordered in the readable shade rather than filled, so the label stays in the page's
+            // own text colour.
             <button
               key={option.title}
               type="button"
               data-testid="interactiveOption"
               disabled={!onSelectOption}
               onClick={() => onSelectOption?.(option.title as string)}
-              className="rounded-full border-2 border-brand-accent px-4 py-2 text-left text-sm font-semibold hover:bg-brand-accent/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-full border-2 border-primary px-4 py-2 text-left text-sm font-semibold hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="block">{option.title}</span>
               {option.description && (
@@ -123,7 +123,7 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
         className={cn(
           'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
           isSent
-            ? 'rounded-br-sm bg-primary text-primary-foreground'
+            ? 'rounded-br-sm bg-muted text-foreground ring-1 ring-foreground/10'
             : 'rounded-bl-sm bg-card text-card-foreground ring-1 ring-foreground/10'
         )}
       >
@@ -138,13 +138,7 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
             whatsappToJsx(message.body)
           )}
         </div>
-        <span
-          className={cn(
-            'mt-1 block text-right text-[0.65rem] tabular-nums',
-            isSent ? 'text-primary-foreground' : 'text-muted-foreground'
-          )}
-          data-testid="date"
-        >
+        <span className="mt-1 block text-right text-[0.65rem] text-muted-foreground tabular-nums" data-testid="date">
           {formatShortTime(message.inserted_at)}
         </span>
       </div>

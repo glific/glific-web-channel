@@ -28,7 +28,7 @@ export const About = () => {
             // Not navigate(-1): this screen is reachable from the header, from the menu and by
             // its own URL, and only one of those has a chat behind it to go back to.
             onClick={() => navigate('/chat')}
-            className="rounded-full p-1 text-primary-foreground hover:bg-white/10"
+            className="rounded-full p-1 text-brand-foreground hover:bg-white/10"
           >
             <ChevronLeft className="size-6" />
           </button>
