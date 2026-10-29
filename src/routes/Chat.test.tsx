@@ -277,10 +277,9 @@ describe('<Chat /> media, voice and location composers', () => {
     expect(screen.queryByTestId('attachMenu')).not.toBeInTheDocument();
     expect(screen.getByTestId('attachButton')).toHaveFocus();
 
-    // + toggles it closed too, rather than closing and reopening it
+    // a tap on the dimmed chat behind the sheet closes it too
     fireEvent.click(screen.getByTestId('attachButton'));
-    fireEvent.mouseDown(screen.getByTestId('attachButton'));
-    fireEvent.click(screen.getByTestId('attachButton'));
+    fireEvent.click(screen.getByTestId('attachBackdrop'));
     expect(screen.queryByTestId('attachMenu')).not.toBeInTheDocument();
   });
 

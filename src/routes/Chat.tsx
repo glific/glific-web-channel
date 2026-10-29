@@ -120,9 +120,9 @@ export const Chat = () => {
   const busy = media.status === 'uploading' || media.status === 'sending';
   const hasContent = !!media.pending || !!draft.trim();
 
-  const closeAttach = useCallback((returnFocus: boolean) => {
+  const closeAttach = useCallback(() => {
     setAttachOpen(false);
-    if (returnFocus) attachButtonRef.current?.focus();
+    attachButtonRef.current?.focus();
   }, []);
 
   // One file input serves every picker option; each one only changes what the picker offers.
@@ -258,7 +258,7 @@ export const Chat = () => {
   };
 
   return (
-    <div className="mx-auto flex h-[100svh] w-full max-w-2xl flex-col bg-background" data-testid="webChannelChat">
+    <div className="relative mx-auto flex h-[100svh] w-full max-w-2xl flex-col bg-background" data-testid="webChannelChat">
       <header className="flex items-center gap-3 bg-brand px-4 py-3 text-brand-foreground">
         {/* The whole identity block, the way WhatsApp opens contact info — a 44px mark and two
             lines of text make a far better thumb target than any icon added beside them. */}
@@ -315,7 +315,7 @@ export const Chat = () => {
         ))}
       </div>
 
-      <footer className="relative flex flex-col gap-2 border-t px-4 py-3">
+      <footer className="flex flex-col gap-2 border-t px-4 py-3">
         {composerError && (
           <span className="text-xs text-destructive" data-testid="composerError">
             {composerError}
@@ -366,14 +366,6 @@ export const Chat = () => {
                 e.target.value = '';
               }}
             />
-            {attachOpen && (
-              <AttachMenu
-                onPick={handleAttach}
-                onClose={closeAttach}
-                toggleRef={attachButtonRef}
-                disabled={location.isSharing ? ['location'] : []}
-              />
-            )}
             <Button
               ref={attachButtonRef}
               variant="ghost"
@@ -418,6 +410,14 @@ export const Chat = () => {
           </div>
         )}
       </footer>
+
+      {attachOpen && (
+        <AttachMenu
+          onPick={handleAttach}
+          onClose={closeAttach}
+          disabled={location.isSharing ? ['location'] : []}
+        />
+      )}
     </div>
   );
 };

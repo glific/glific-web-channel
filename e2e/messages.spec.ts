@@ -208,24 +208,30 @@ test.describe('sending a text message', () => {
 });
 
 test.describe('the attach menu', () => {
-  test('+ opens Camera, Gallery, Document and Location, and a press outside closes it', async ({ page }) => {
+  test('+ slides up a sheet of Camera, Gallery, Document and Location; Escape or a tap behind it closes it', async ({
+    page,
+  }) => {
     await openChat(page);
+    const sheet = page.getByTestId('attachMenu');
 
     await page.getByTestId('attachButton').click();
     await expect(page.getByRole('menuitem')).toHaveText(['Camera', 'Gallery', 'Document', 'Location']);
 
-    await page.getByTestId('messageList').click();
-    await expect(page.getByTestId('attachMenu')).toHaveCount(0);
+    // A bottom sheet: full width of the chat, flush with its bottom edge — measured once it has
+    // finished sliding up, since the slide moves it with a transform.
+    await sheet.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+    const chat = (await page.getByTestId('webChannelChat').boundingBox())!;
+    const box = (await sheet.boundingBox())!;
+    expect(Math.round(box.width)).toBe(Math.round(chat.width));
+    expect(Math.round(box.y + box.height)).toBe(Math.round(chat.y + chat.height));
 
-    // + closes it again too, and pressing the message field to close it leaves focus there
-    await page.getByTestId('attachButton').click();
-    await page.getByTestId('attachButton').click();
-    await expect(page.getByTestId('attachMenu')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByTestId('attachButton')).toBeFocused();
 
     await page.getByTestId('attachButton').click();
-    await page.getByTestId('composerInput').click();
-    await expect(page.getByTestId('attachMenu')).toHaveCount(0);
-    await expect(page.getByTestId('composerInput')).toBeFocused();
+    await page.getByTestId('attachBackdrop').click({ position: { x: 20, y: 120 } });
+    await expect(sheet).toHaveCount(0);
   });
 
   test('Gallery opens the picker for photos and videos, and the picture is previewed before sending', async ({
