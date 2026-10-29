@@ -139,18 +139,47 @@ test.describe('sending a text message', () => {
   });
 
   // Whitespace would reach the server as an empty message and render as an empty bubble. As in
-  // WhatsApp, the mic stands in for Send until there is something to send.
-  test('an empty or whitespace-only draft offers the mic, not Send', async ({ page }) => {
+  // WhatsApp, the mic stands in for Send until there is something to send — but only where the
+  // browser can record a format the server accepts. Elsewhere (WebKit on Linux, in CI) there is no
+  // mic, and Send shows disabled instead.
+  test('an empty or whitespace-only draft offers the mic, or a disabled Send, never a live Send', async ({ page }) => {
+    await openChat(page);
+    const record = page.getByTestId('recordButton');
+    const send = page.getByTestId('sendButton');
+    await expect(record.or(send)).toBeVisible();
+    const canRecord = await record.isVisible();
+
+    const expectNothingToSend = async () => {
+      if (canRecord) {
+        await expect(record).toBeVisible();
+        await expect(send).toHaveCount(0);
+      } else {
+        await expect(send).toBeDisabled();
+      }
+    };
+
+    await expectNothingToSend();
+    await page.getByTestId('composerInput').fill('   ');
+    await expectNothingToSend();
+
+    await page.getByTestId('composerInput').fill('hi');
+    await expect(send).toBeEnabled();
+    await expect(record).toHaveCount(0);
+  });
+
+  // Without recording support there must be no mic that can never produce a sendable voice note.
+  test('a browser that cannot record shows a disabled Send, not a mic', async ({ page }) => {
+    await page.addInitScript(() => {
+      // @ts-expect-error removing the API, the way a browser without it presents
+      delete window.MediaRecorder;
+    });
     await openChat(page);
 
-    await expect(page.getByTestId('recordButton')).toBeVisible();
-    await expect(page.getByTestId('sendButton')).toHaveCount(0);
-    await page.getByTestId('composerInput').fill('   ');
-    await expect(page.getByTestId('sendButton')).toHaveCount(0);
+    await expect(page.getByTestId('recordButton')).toHaveCount(0);
+    await expect(page.getByTestId('sendButton')).toBeDisabled();
 
     await page.getByTestId('composerInput').fill('hi');
     await expect(page.getByTestId('sendButton')).toBeEnabled();
-    await expect(page.getByTestId('recordButton')).toHaveCount(0);
   });
 
   test('history from the join renders, oldest first', async ({ page }) => {
