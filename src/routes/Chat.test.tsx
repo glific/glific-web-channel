@@ -92,6 +92,9 @@ describe('<Chat /> media, voice and location composers', () => {
     vi.clearAllMocks();
     mockedUpload.mockResolvedValue(hosted);
     recorderMock.isSupported = true;
+    // jsdom has no object URLs; the picture preview needs one for a picked image.
+    URL.createObjectURL = vi.fn(() => 'blob:preview');
+    URL.revokeObjectURL = vi.fn();
     recorderMock.isRecording = false;
     recorderMock.seconds = 0;
     recorderMock.error = null;
@@ -109,7 +112,7 @@ describe('<Chat /> media, voice and location composers', () => {
     await renderChat();
 
     pickFile();
-    expect(screen.getByTestId('pendingAttachmentName')).toHaveTextContent('cat.png');
+    expect(screen.getByTestId('pendingImagePreview')).toHaveAttribute('alt', 'cat.png');
 
     fireEvent.change(screen.getByTestId('composerInput'), { target: { value: 'my cat' } });
     fireEvent.click(screen.getByTestId('sendButton'));
@@ -137,7 +140,7 @@ describe('<Chat /> media, voice and location composers', () => {
     fireEvent.click(screen.getByTestId('sendButton'));
 
     expect(await screen.findByTestId('composerError')).toHaveTextContent(/too large/i);
-    expect(screen.getByTestId('pendingAttachmentName')).toHaveTextContent('cat.png');
+    expect(screen.getByTestId('pendingImagePreview')).toHaveAttribute('alt', 'cat.png');
     expect(screen.getByTestId('composerInput')).toHaveValue('my cat');
     expect(mockedMediaPush).not.toHaveBeenCalled();
 
@@ -237,10 +240,89 @@ describe('<Chat /> media, voice and location composers', () => {
     expect(screen.getByTestId('composerError')).toHaveTextContent(/microphone/i);
   });
 
+  // As in WhatsApp: the mic until there is something to send.
+  it('shows the mic while the composer is empty, and Send once something is typed', async () => {
+    await renderChat();
+
+    expect(screen.getByTestId('recordButton')).toBeInTheDocument();
+    expect(screen.queryByTestId('sendButton')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('composerInput'), { target: { value: 'hi' } });
+
+    expect(screen.getByTestId('sendButton')).toBeEnabled();
+    expect(screen.queryByTestId('recordButton')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('composerInput'), { target: { value: '   ' } });
+
+    expect(screen.getByTestId('recordButton')).toBeInTheDocument();
+  });
+
+  it('shows Send rather than the mic once a file is attached, even with no caption', async () => {
+    await renderChat();
+
+    pickFile();
+
+    expect(screen.getByTestId('sendButton')).toBeEnabled();
+    expect(screen.queryByTestId('recordButton')).not.toBeInTheDocument();
+  });
+
+  it('opens the attach menu from +, and closes it again', async () => {
+    await renderChat();
+
+    fireEvent.click(screen.getByTestId('attachButton'));
+    expect(screen.getByTestId('attachMenu')).toBeInTheDocument();
+    expect(screen.getByTestId('attachButton')).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('attachMenu')).not.toBeInTheDocument();
+    expect(screen.getByTestId('attachButton')).toHaveFocus();
+
+    // + toggles it closed too, rather than closing and reopening it
+    fireEvent.click(screen.getByTestId('attachButton'));
+    fireEvent.mouseDown(screen.getByTestId('attachButton'));
+    fireEvent.click(screen.getByTestId('attachButton'));
+    expect(screen.queryByTestId('attachMenu')).not.toBeInTheDocument();
+  });
+
+  // One file input serves every option; each sets what the picker offers. `capture` is what makes
+  // a phone open its camera rather than the gallery.
+  it.each([
+    ['camera', 'image/*', true],
+    ['gallery', 'image/*,video/*', false],
+    ['document', 'application/pdf', false],
+  ])('opens the picker for %s with the right file types', async (option, accepts, capture) => {
+    await renderChat();
+    const input = screen.getByTestId('fileInput') as HTMLInputElement;
+    const click = vi.spyOn(input, 'click').mockImplementation(() => {});
+
+    fireEvent.click(screen.getByTestId('attachButton'));
+    fireEvent.click(screen.getByTestId(`attach-${option}`));
+
+    expect(click).toHaveBeenCalled();
+    expect(input.accept).toContain(accepts);
+    expect(input.hasAttribute('capture')).toBe(capture);
+    expect(screen.queryByTestId('attachMenu')).not.toBeInTheDocument();
+  });
+
+  it('previews a picked picture, and shows any other file by name', async () => {
+    await renderChat();
+
+    pickFile();
+    expect(screen.getByTestId('pendingImagePreview')).toHaveAttribute('src', 'blob:preview');
+
+    fireEvent.click(screen.getByTestId('removeAttachmentButton'));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+
+    pickFile(new File(['%PDF'], 'report.pdf', { type: 'application/pdf' }));
+    expect(screen.getByTestId('pendingAttachmentName')).toHaveTextContent('report.pdf');
+    expect(screen.queryByTestId('pendingImagePreview')).not.toBeInTheDocument();
+  });
+
   it('shares the location and renders it as a map link', async () => {
     await renderChat();
 
-    fireEvent.click(screen.getByTestId('locationButton'));
+    fireEvent.click(screen.getByTestId('attachButton'));
+    fireEvent.click(screen.getByTestId('attach-location'));
 
     await waitFor(() =>
       expect(mockedLocationPush).toHaveBeenCalledWith({ id: 'ch' }, { latitude: 12.9, longitude: 77.5 })
@@ -262,7 +344,8 @@ describe('<Chat /> media, voice and location composers', () => {
     });
     await renderChat();
 
-    fireEvent.click(screen.getByTestId('locationButton'));
+    fireEvent.click(screen.getByTestId('attachButton'));
+    fireEvent.click(screen.getByTestId('attach-location'));
 
     expect(await screen.findByTestId('composerError')).toHaveTextContent(/blocked/i);
     expect(mockedLocationPush).not.toHaveBeenCalled();

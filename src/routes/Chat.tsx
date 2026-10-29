@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Mic, MoreVertical, Paperclip, Send, Trash2, X } from 'lucide-react';
+import { Mic, MoreVertical, Plus, Send, Trash2 } from 'lucide-react';
 import type { Channel, Socket } from 'phoenix';
 
 import { Button } from '@/components/ui/button';
+import { AttachMenu, type AttachOption } from '@/components/chat/AttachMenu';
 import { ComposerInput } from '@/components/chat/ComposerInput';
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { PendingAttachment } from '@/components/chat/PendingAttachment';
 import { ChatMenu } from '@/components/chat/ChatMenu';
 import { Logo } from '@/components/branding/Logo';
 import { getBranding } from '@/services/branding';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useLocationShare, type SharedLocation } from '@/hooks/useLocationShare';
 import { useMediaSend } from '@/hooks/useMediaSend';
-import { UPLOAD_ACCEPT } from '@/services/webChannelMedia';
+import { CAMERA_ACCEPT, DOCUMENT_ACCEPT, GALLERY_ACCEPT } from '@/services/webChannelMedia';
 import {
   connectAndJoin,
   disconnect,
@@ -58,6 +60,8 @@ export const Chat = () => {
   const channelRef = useRef<Channel | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
   // track seen ids so an echoed "new_message" push never duplicates an already-rendered message
   const seenIds = useRef<Set<string>>(new Set());
 
@@ -114,6 +118,31 @@ export const Chat = () => {
   });
 
   const busy = media.status === 'uploading' || media.status === 'sending';
+  const hasContent = !!media.pending || !!draft.trim();
+
+  const closeAttach = useCallback((returnFocus: boolean) => {
+    setAttachOpen(false);
+    if (returnFocus) attachButtonRef.current?.focus();
+  }, []);
+
+  // One file input serves every picker option; each one only changes what the picker offers.
+  // `capture` is what makes a phone open its camera instead of the gallery.
+  const pickFile = (accept: string, capture = false) => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.accept = accept;
+    if (capture) input.setAttribute('capture', 'environment');
+    else input.removeAttribute('capture');
+    input.click();
+  };
+
+  const handleAttach = (option: AttachOption) => {
+    setAttachOpen(false);
+    if (option === 'camera') pickFile(CAMERA_ACCEPT, true);
+    else if (option === 'gallery') pickFile(GALLERY_ACCEPT);
+    else if (option === 'document') pickFile(DOCUMENT_ACCEPT);
+    else location.share();
+  };
   const composerError = media.error ?? recorder.error ?? location.error;
 
   // open socket + join channel on mount
@@ -286,7 +315,7 @@ export const Chat = () => {
         ))}
       </div>
 
-      <footer className="flex flex-col gap-2 border-t px-4 py-3">
+      <footer className="relative flex flex-col gap-2 border-t px-4 py-3">
         {composerError && (
           <span className="text-xs text-destructive" data-testid="composerError">
             {composerError}
@@ -294,26 +323,12 @@ export const Chat = () => {
         )}
 
         {media.pending && (
-          <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1" data-testid="pendingAttachment">
-            <Paperclip className="size-4 shrink-0" />
-            <span className="truncate text-xs" data-testid="pendingAttachmentName">
-              {media.pending.file.name}
-            </span>
-            {STATUS_LABELS[media.status] && (
-              <span className="text-xs text-muted-foreground">{STATUS_LABELS[media.status]}</span>
-            )}
-            <div className="flex-1" />
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="remove attachment"
-              data-testid="removeAttachmentButton"
-              onClick={media.discard}
-              disabled={busy}
-            >
-              <X />
-            </Button>
-          </div>
+          <PendingAttachment
+            pending={media.pending}
+            status={STATUS_LABELS[media.status]}
+            disabled={busy}
+            onRemove={media.discard}
+          />
         )}
 
         {recorder.isRecording ? (
@@ -343,7 +358,6 @@ export const Chat = () => {
               ref={fileInputRef}
               type="file"
               hidden
-              accept={UPLOAD_ACCEPT}
               data-testid="fileInput"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -352,29 +366,36 @@ export const Chat = () => {
                 e.target.value = '';
               }}
             />
+            {attachOpen && (
+              <AttachMenu
+                onPick={handleAttach}
+                onClose={closeAttach}
+                toggleRef={attachButtonRef}
+                disabled={location.isSharing ? ['location'] : []}
+              />
+            )}
             <Button
+              ref={attachButtonRef}
               variant="ghost"
               size="icon"
-              aria-label="attach file"
+              aria-label="attach"
+              aria-haspopup="menu"
+              aria-expanded={attachOpen}
               data-testid="attachButton"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setAttachOpen((open) => !open)}
               disabled={busy}
             >
-              <Paperclip />
+              <Plus />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="share location"
-              data-testid="locationButton"
-              onClick={location.share}
-              disabled={location.isSharing}
-            >
-              <MapPin />
-            </Button>
-            {recorder.isSupported && (
+            <ComposerInput
+              value={draft}
+              placeholder={media.pending ? 'Add a caption' : 'Type a message'}
+              onChange={setDraft}
+              onSubmit={handleSend}
+            />
+            {/* As in WhatsApp: the mic until there is something to send, then Send. */}
+            {!hasContent && recorder.isSupported ? (
               <Button
-                variant="ghost"
                 size="icon"
                 aria-label="record voice note"
                 data-testid="recordButton"
@@ -383,22 +404,17 @@ export const Chat = () => {
               >
                 <Mic />
               </Button>
+            ) : (
+              <Button
+                size="icon"
+                aria-label={media.status === 'failed' ? 'retry sending' : 'send message'}
+                data-testid="sendButton"
+                onClick={handleSend}
+                disabled={busy || !hasContent}
+              >
+                <Send />
+              </Button>
             )}
-            <ComposerInput
-              value={draft}
-              placeholder={media.pending ? 'Add a caption' : 'Type a message'}
-              onChange={setDraft}
-              onSubmit={handleSend}
-            />
-            <Button
-              size="icon"
-              aria-label={media.status === 'failed' ? 'retry sending' : 'send message'}
-              data-testid="sendButton"
-              onClick={handleSend}
-              disabled={busy || (!media.pending && !draft.trim())}
-            >
-              <Send />
-            </Button>
           </div>
         )}
       </footer>

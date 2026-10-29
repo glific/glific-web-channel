@@ -16,12 +16,7 @@ interface SignedUpload {
   expires_in: number;
 }
 
-// Audio is offered whole even though the server refuses ogg: `accept` cannot express an
-// exception, and the picker is a hint rather than the authority.
-export const UPLOAD_ACCEPT = [
-  'image/*',
-  'video/*',
-  'audio/*',
+const DOCUMENT_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.ms-excel',
@@ -30,7 +25,16 @@ export const UPLOAD_ACCEPT = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx',
-].join(',');
+];
+
+// What each attach-menu option offers the picker. Audio is offered whole even though the server
+// refuses ogg: `accept` cannot express an exception, and the picker is a hint rather than the
+// authority. It sits under Document, as a file the contact already has, the way WhatsApp files it.
+export const CAMERA_ACCEPT = 'image/*';
+export const GALLERY_ACCEPT = 'image/*,video/*';
+export const DOCUMENT_ACCEPT = ['audio/*', ...DOCUMENT_TYPES].join(',');
+
+export const UPLOAD_ACCEPT = ['image/*', 'video/*', 'audio/*', ...DOCUMENT_TYPES].join(',');
 
 // Anything the browser cannot name goes as a document: a picker that reports no MIME type is
 // still likely to be a file the document branch accepts.
