@@ -18,10 +18,12 @@ import {
   disconnect,
   pushLoadMore,
   pushNewMessage,
+  pushStartFlow,
   type OutboundMedia,
   type WebChannelMessage,
 } from '@/services/webChannelSocket';
 import { clearWebChannelSession, getWebChannelContact, getWebChannelToken } from '@/services/webChannelAuth';
+import { hasStartedFromLink, markStartedFromLink, takeChatLink } from '@/lib/chatLink';
 
 const PAGE_SIZE = 100;
 
@@ -116,6 +118,28 @@ export const Chat = () => {
   const busy = media.status === 'uploading' || media.status === 'sending';
   const composerError = media.error ?? recorder.error ?? location.error;
 
+  // A link's message, once the chat has joined (see lib/chatLink). Text is only ever pre-filled;
+  // a keyword is started once per contact, and only if the server finds a web flow for it.
+  const applyChatLink = (channel: Channel) => {
+    const link = takeChatLink();
+    if (!link) return;
+
+    if (link.text) setDraft((current) => current || (link.text as string));
+
+    const keyword = link.start;
+    if (!keyword || !contact || hasStartedFromLink(contact.contactId, keyword)) return;
+
+    pushStartFlow(channel, keyword)
+      .then((result) => {
+        // Recorded either way, so a keyword that isn't a web flow's isn't retried on every visit.
+        markStartedFromLink(contact.contactId, keyword);
+        if (result.started) appendLocal({ body: keyword, type: 'text' });
+      })
+      .catch(() => {
+        // A timeout leaves it unrecorded: the server may never have seen it.
+      });
+  };
+
   // open socket + join channel on mount
   useEffect(() => {
     if (!token || !contact) {
@@ -151,6 +175,7 @@ export const Chat = () => {
         setReachedStart(initial.length < PAGE_SIZE);
         // jump to the newest message after the first paint
         requestAnimationFrame(scrollToBottom);
+        applyChatLink(channel);
       })
       .catch(() => {
         if (active) setConnectionState('reconnecting');
