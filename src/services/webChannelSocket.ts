@@ -196,6 +196,19 @@ export const pushRenewToken = (channel: Channel, token: string): Promise<unknown
       .receive('timeout', () => reject(new Error('renew_token timeout')));
   });
 
+export type StartFlowResult = { started: true } | { started: false; reason: string };
+
+// Ask the server to start the web flow whose keyword this is, as if the contact had typed it.
+// A keyword that isn't a web flow's is an error reply, not a message: nothing is sent.
+export const pushStartFlow = (channel: Channel, keyword: string): Promise<StartFlowResult> =>
+  new Promise((resolve, reject) => {
+    channel
+      .push('start_flow', { keyword })
+      .receive('ok', () => resolve({ started: true }))
+      .receive('error', (reply: { reason?: string }) => resolve({ started: false, reason: reply?.reason ?? 'unknown' }))
+      .receive('timeout', () => reject(new Error('start_flow timeout')));
+  });
+
 // request an older page of messages (offset = current message count). Resolves with the page (oldest -> newest).
 export const pushLoadMore = (channel: Channel, offset: number): Promise<WebChannelMessage[]> =>
   new Promise((resolve, reject) => {
