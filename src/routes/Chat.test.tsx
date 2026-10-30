@@ -150,14 +150,27 @@ describe('<Chat /> media, voice and location composers', () => {
     expect(mockedUpload).toHaveBeenCalledTimes(2);
   });
 
+  // The server has the last word: a file the widget lets through can still be refused there.
   it('shows the server-refused type in the widget’s own words', async () => {
     uploadRejects('unsupported_type', 415);
     await renderChat();
 
-    pickFile(new File([''], 'virus.exe', { type: 'application/x-msdownload' }));
+    pickFile();
     fireEvent.click(screen.getByTestId('sendButton'));
 
     expect(await screen.findByTestId('composerError')).toHaveTextContent(/cannot be sent/i);
+  });
+
+  // A picker's file-type filter is only a hint: "All files" ignores it.
+  it('refuses a file type outside the list as soon as it is picked, and says what can be sent', async () => {
+    await renderChat();
+
+    pickFile(new File([''], 'virus.exe', { type: 'application/x-msdownload' }));
+
+    expect(screen.getByTestId('composerError')).toHaveTextContent(/can't be sent/);
+    expect(screen.getByTestId('composerError')).toHaveTextContent(/JPG or PNG photos/);
+    expect(screen.queryByTestId('pendingAttachment')).not.toBeInTheDocument();
+    expect(mockedUpload).not.toHaveBeenCalled();
   });
 
   it('discards an attachment without sending it', async () => {
@@ -286,8 +299,8 @@ describe('<Chat /> media, voice and location composers', () => {
   // One file input serves every option; each sets what the picker offers. `capture` is what makes
   // a phone open its camera rather than the gallery.
   it.each([
-    ['camera', 'image/*', true],
-    ['gallery', 'image/*,video/*', false],
+    ['camera', 'image/jpeg', true],
+    ['gallery', 'video/mp4', false],
     ['document', 'application/pdf', false],
   ])('opens the picker for %s with the right file types', async (option, accepts, capture) => {
     await renderChat();
@@ -299,6 +312,7 @@ describe('<Chat /> media, voice and location composers', () => {
 
     expect(click).toHaveBeenCalled();
     expect(input.accept).toContain(accepts);
+    expect(input.accept).not.toContain('/*');
     expect(input.hasAttribute('capture')).toBe(capture);
     expect(screen.queryByTestId('attachMenu')).not.toBeInTheDocument();
   });

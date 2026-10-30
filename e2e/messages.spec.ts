@@ -234,7 +234,7 @@ test.describe('the attach menu', () => {
     await expect(sheet).toHaveCount(0);
   });
 
-  test('Gallery opens the picker for photos and videos, and the picture is previewed before sending', async ({
+  test('Gallery opens the picker for supported photos and videos, and the picture is previewed before sending', async ({
     page,
   }) => {
     await openChat(page);
@@ -244,12 +244,27 @@ test.describe('the attach menu', () => {
     await page.getByTestId('attach-gallery').click();
     const picker = await chooser;
 
-    expect(await picker.element().getAttribute('accept')).toBe('image/*,video/*');
+    const accept = (await picker.element().getAttribute('accept'))!;
+    expect(accept).toContain('image/jpeg');
+    expect(accept).toContain('video/mp4');
+    expect(accept).not.toContain('/*');
     expect(await picker.element().getAttribute('capture')).toBeNull();
 
     await picker.setFiles(PNG_FIXTURE);
     await expect(page.getByTestId('pendingImagePreview')).toBeVisible();
     await expect(page.getByTestId('composerInput')).toHaveAttribute('placeholder', 'Add a caption');
+  });
+
+  // The picker's file-type filter is only a hint: "All files" on Android ignores it.
+  test('a file type outside the list is refused when picked, with what can be sent instead', async ({ page }) => {
+    await openChat(page);
+    const signing = stubUploadUrl(page);
+
+    await attach(page, { name: 'party.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
+
+    await expect(page.getByTestId('composerError')).toContainText("That file type can't be sent.");
+    await expect(page.getByTestId('pendingAttachment')).toHaveCount(0);
+    expect(signing.count).toBe(0);
   });
 
   // `capture` is what makes a phone open its camera rather than the gallery.
