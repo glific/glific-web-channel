@@ -27,8 +27,8 @@ const phoneSchema = z
   .object({
     countryCode: z.string().trim().regex(/^\+?\d{1,4}$/, 'Enter a country code, for example +91.'),
     phone: z.string().trim().min(1, 'Please enter your phone number.'),
-    // Signing in is what records consent for this channel, so it gates the request rather than
-    // being collected after a code has already gone out.
+    // Consent is sent with the code check and recorded on sign in, so it gates the request rather
+    // than being collected after a code has already gone out.
     consent: z.literal(true),
   })
   .refine(({ countryCode, phone }) => /^\+?[1-9]\d{7,14}$/.test(fullNumber(countryCode, phone)), {
@@ -177,7 +177,7 @@ export const Login = () => {
     setError('');
     setNotice('');
     setLoading(true);
-    verifyOtp(phone, values.otp)
+    verifyOtp(phone, values.otp, phoneForm.getValues('consent'))
       .then(({ data }) => {
         const { token, contact_id: contactId, name } = data?.data ?? {};
         setWebChannelSession({ token, contactId, name, phone });
