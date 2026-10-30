@@ -1,7 +1,14 @@
 import { useCallback, useRef, useState } from 'react';
 import type { Channel } from 'phoenix';
 
-import { mediaTypeFor, uploadErrorMessage, uploadMedia, type UploadedMedia } from '@/services/webChannelMedia';
+import {
+  isSupportedFile,
+  mediaTypeFor,
+  UNSUPPORTED_FILE_ERROR,
+  uploadErrorMessage,
+  uploadMedia,
+  type UploadedMedia,
+} from '@/services/webChannelMedia';
 import { pushNewMediaMessage, type OutboundMedia, type OutboundMediaType } from '@/services/webChannelSocket';
 
 export type MediaSendStatus = 'idle' | 'uploading' | 'sending' | 'failed';
@@ -51,8 +58,12 @@ export const useMediaSend = (
   };
 
   const attach = useCallback((file: File) => {
-    setError(null);
     setStatus('idle');
+    if (!isSupportedFile(file)) {
+      setError(UNSUPPORTED_FILE_ERROR);
+      return;
+    }
+    setError(null);
     setPendingMedia({ file, type: mediaTypeFor(file), uploaded: null });
   }, []);
 

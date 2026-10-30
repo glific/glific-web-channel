@@ -16,12 +16,17 @@ interface SignedUpload {
   expires_in: number;
 }
 
-// Audio is offered whole even though the server refuses ogg: `accept` cannot express an
-// exception, and the picker is a hint rather than the authority.
-export const UPLOAD_ACCEPT = [
-  'image/*',
-  'video/*',
-  'audio/*',
+// Only the formats WhatsApp itself supports, since these messages reach staff and flows like any
+// WhatsApp message would, rather than the server's wildcards: an `image/*` picker also offers HEIC,
+// GIF and SVG. Naming JPEG in the picker also makes an iPhone convert a HEIC photo before upload.
+// Extensions sit alongside the MIME types because some pickers filter on one, some on the other.
+const PHOTO_TYPES = ['image/jpeg', 'image/png'];
+const VIDEO_TYPES = ['video/mp4', 'video/3gpp'];
+// No audio/ogg: the server refuses it. webm is what the voice-note recorder produces on
+// Chrome, Firefox and Android, and is only ever recorded, never offered in a picker.
+const AUDIO_FILE_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/amr'];
+const RECORDING_TYPES = ['audio/webm', 'audio/mp4'];
+const DOCUMENT_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.ms-excel',
@@ -29,8 +34,40 @@ export const UPLOAD_ACCEPT = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx',
-].join(',');
+];
+
+const PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png'];
+const VIDEO_EXTENSIONS = ['.mp4', '.3gp'];
+const AUDIO_EXTENSIONS = ['.mp3', '.m4a', '.aac', '.amr'];
+const DOCUMENT_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
+
+const SUPPORTED_TYPES = new Set([...PHOTO_TYPES, ...VIDEO_TYPES, ...AUDIO_FILE_TYPES, ...RECORDING_TYPES, ...DOCUMENT_TYPES]);
+const SUPPORTED_EXTENSIONS = [...PHOTO_EXTENSIONS, ...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS, ...DOCUMENT_EXTENSIONS];
+
+// What each attach-menu option offers the picker. Audio files sit under Document, as files the
+// contact already has, the way WhatsApp files them.
+export const CAMERA_ACCEPT = [...PHOTO_TYPES, ...PHOTO_EXTENSIONS].join(',');
+export const GALLERY_ACCEPT = [...PHOTO_TYPES, ...VIDEO_TYPES, ...PHOTO_EXTENSIONS, ...VIDEO_EXTENSIONS].join(',');
+export const DOCUMENT_ACCEPT = [...DOCUMENT_TYPES, ...AUDIO_FILE_TYPES, ...DOCUMENT_EXTENSIONS, ...AUDIO_EXTENSIONS].join(',');
+
+export const UPLOAD_ACCEPT = [CAMERA_ACCEPT, GALLERY_ACCEPT, DOCUMENT_ACCEPT].join(',');
+
+/** Shown when a file outside the list is picked anyway, e.g. through a picker's "All files". */
+export const UNSUPPORTED_FILE_ERROR =
+  "That file type can't be sent. You can send JPG or PNG photos, MP4 videos, MP3, M4A or AAC audio, and PDF, Word, Excel or PowerPoint files.";
+
+/**
+ * Whether a file is one the widget will send. A picker's `accept` is only a hint — "All files" and
+ * drag-and-drop ignore it — so this is checked on every file before it is attached. A file the
+ * browser cannot name a type for is judged by its extension instead.
+ */
+export const isSupportedFile = (file: File): boolean => {
+  const type = file.type.split(';')[0].trim().toLowerCase();
+  if (type) return SUPPORTED_TYPES.has(type);
+
+  const name = file.name.toLowerCase();
+  return SUPPORTED_EXTENSIONS.some((extension) => name.endsWith(extension));
+};
 
 // Anything the browser cannot name goes as a document: a picker that reports no MIME type is
 // still likely to be a file the document branch accepts.

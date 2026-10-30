@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { uploadMedia } from '@/services/webChannelMedia';
+import { UNSUPPORTED_FILE_ERROR, uploadMedia } from '@/services/webChannelMedia';
 import { pushNewMediaMessage } from '@/services/webChannelSocket';
 import { useMediaSend } from './useMediaSend';
 
@@ -134,6 +134,24 @@ describe('useMediaSend', () => {
     });
 
     expect(result.current.error).not.toBe(uploadMessage);
+  });
+
+  it('refuses a file type outside the list, attaching nothing and saying what can be sent', () => {
+    const { result } = renderMediaSend();
+
+    act(() => result.current.attach(new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })));
+
+    expect(result.current.pending).toBeNull();
+    expect(result.current.error).toBe(UNSUPPORTED_FILE_ERROR);
+  });
+
+  it('accepts a voice note in the formats the recorder produces', () => {
+    const { result } = renderMediaSend();
+
+    act(() => result.current.attach(new File(['a'], 'note.webm', { type: 'audio/webm;codecs=opus' })));
+
+    expect(result.current.pending?.type).toBe('audio');
+    expect(result.current.error).toBeNull();
   });
 
   it('clears the error when a new file replaces the failed one', async () => {
