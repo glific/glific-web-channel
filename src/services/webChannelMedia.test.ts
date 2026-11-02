@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { WEB_CHANNEL_UPLOAD } from '@/config';
 import { setWebChannelSession } from '@/services/webChannelAuth';
-import { mediaTypeFor, uploadErrorMessage, uploadMedia, UPLOAD_ACCEPT } from './webChannelMedia';
+import { isSupportedFile, mediaTypeFor, uploadErrorMessage, uploadMedia, UPLOAD_ACCEPT } from './webChannelMedia';
 
 vi.mock('axios');
 const mockedAxios = axios as any;
@@ -164,6 +164,46 @@ describe('webChannelMedia', () => {
     it('offers no document type the server would refuse', () => {
       expect(UPLOAD_ACCEPT).not.toContain('application/zip');
       expect(UPLOAD_ACCEPT).not.toContain('text/html');
+    });
+
+    // A wildcard also offers HEIC, GIF, SVG and other formats WhatsApp does not support.
+    it('names exact types, never a wildcard', () => {
+      expect(UPLOAD_ACCEPT).not.toContain('/*');
+    });
+  });
+
+  describe('isSupportedFile', () => {
+    const fileOf = (name: string, type: string) => new File(['x'], name, { type });
+
+    it.each([
+      ['photo.jpg', 'image/jpeg'],
+      ['photo.png', 'image/png'],
+      ['clip.mp4', 'video/mp4'],
+      ['clip.3gp', 'video/3gpp'],
+      ['song.mp3', 'audio/mpeg'],
+      ['memo.m4a', 'audio/mp4'],
+      ['note.webm', 'audio/webm;codecs=opus'],
+      ['report.pdf', 'application/pdf'],
+      ['sheet.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    ])('accepts %s (%s)', (name, type) => {
+      expect(isSupportedFile(fileOf(name, type))).toBe(true);
+    });
+
+    it.each([
+      ['photo.heic', 'image/heic'],
+      ['anim.gif', 'image/gif'],
+      ['logo.svg', 'image/svg+xml'],
+      ['voice.ogg', 'audio/ogg'],
+      ['clip.mov', 'video/quicktime'],
+      ['virus.exe', 'application/x-msdownload'],
+      ['page.html', 'text/html'],
+    ])('refuses %s (%s)', (name, type) => {
+      expect(isSupportedFile(fileOf(name, type))).toBe(false);
+    });
+
+    it('judges a file the browser names no type for by its extension', () => {
+      expect(isSupportedFile(fileOf('report.pdf', ''))).toBe(true);
+      expect(isSupportedFile(fileOf('archive.zip', ''))).toBe(false);
     });
   });
 

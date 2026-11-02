@@ -138,13 +138,48 @@ test.describe('sending a text message', () => {
     await expect(page.getByTestId('webChannelMessage')).toHaveCount(0);
   });
 
-  // Whitespace would reach the server as an empty message and render as an empty bubble.
-  test('an empty or whitespace-only draft cannot be sent', async ({ page }) => {
+  // Whitespace would reach the server as an empty message and render as an empty bubble. As in
+  // WhatsApp, the mic stands in for Send until there is something to send — but only where the
+  // browser can record a format the server accepts. Elsewhere (WebKit on Linux, in CI) there is no
+  // mic, and Send shows disabled instead.
+  test('an empty or whitespace-only draft offers the mic, or a disabled Send, never a live Send', async ({ page }) => {
+    await openChat(page);
+    const record = page.getByTestId('recordButton');
+    const send = page.getByTestId('sendButton');
+    await expect(record.or(send)).toBeVisible();
+    const canRecord = await record.isVisible();
+
+    const expectNothingToSend = async () => {
+      if (canRecord) {
+        await expect(record).toBeVisible();
+        await expect(send).toHaveCount(0);
+      } else {
+        await expect(send).toBeDisabled();
+      }
+    };
+
+    await expectNothingToSend();
+    await page.getByTestId('composerInput').fill('   ');
+    await expectNothingToSend();
+
+    await page.getByTestId('composerInput').fill('hi');
+    await expect(send).toBeEnabled();
+    await expect(record).toHaveCount(0);
+  });
+
+  // Without recording support there must be no mic that can never produce a sendable voice note.
+  test('a browser that cannot record shows a disabled Send, not a mic', async ({ page }) => {
+    await page.addInitScript(() => {
+      // @ts-expect-error removing the API, the way a browser without it presents
+      delete window.MediaRecorder;
+    });
     await openChat(page);
 
+    await expect(page.getByTestId('recordButton')).toHaveCount(0);
     await expect(page.getByTestId('sendButton')).toBeDisabled();
-    await page.getByTestId('composerInput').fill('   ');
-    await expect(page.getByTestId('sendButton')).toBeDisabled();
+
+    await page.getByTestId('composerInput').fill('hi');
+    await expect(page.getByTestId('sendButton')).toBeEnabled();
   });
 
   test('history from the join renders, oldest first', async ({ page }) => {
@@ -172,6 +207,78 @@ test.describe('sending a text message', () => {
   });
 });
 
+test.describe('the attach menu', () => {
+  test('+ slides up a sheet of Camera, Gallery, Document and Location; Escape or a tap behind it closes it', async ({
+    page,
+  }) => {
+    await openChat(page);
+    const sheet = page.getByTestId('attachMenu');
+
+    await page.getByTestId('attachButton').click();
+    await expect(page.getByRole('menuitem')).toHaveText(['Camera', 'Gallery', 'Document', 'Location']);
+
+    // A bottom sheet: full width of the chat, flush with its bottom edge — measured once it has
+    // finished sliding up, since the slide moves it with a transform.
+    await sheet.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+    const chat = (await page.getByTestId('webChannelChat').boundingBox())!;
+    const box = (await sheet.boundingBox())!;
+    expect(Math.round(box.width)).toBe(Math.round(chat.width));
+    expect(Math.round(box.y + box.height)).toBe(Math.round(chat.y + chat.height));
+
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByTestId('attachButton')).toBeFocused();
+
+    await page.getByTestId('attachButton').click();
+    await page.getByTestId('attachBackdrop').click({ position: { x: 20, y: 120 } });
+    await expect(sheet).toHaveCount(0);
+  });
+
+  test('Gallery opens the picker for supported photos and videos, and the picture is previewed before sending', async ({
+    page,
+  }) => {
+    await openChat(page);
+
+    await page.getByTestId('attachButton').click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByTestId('attach-gallery').click();
+    const picker = await chooser;
+
+    const accept = (await picker.element().getAttribute('accept'))!;
+    expect(accept).toContain('image/jpeg');
+    expect(accept).toContain('video/mp4');
+    expect(accept).not.toContain('/*');
+    expect(await picker.element().getAttribute('capture')).toBeNull();
+
+    await picker.setFiles(PNG_FIXTURE);
+    await expect(page.getByTestId('pendingImagePreview')).toBeVisible();
+    await expect(page.getByTestId('composerInput')).toHaveAttribute('placeholder', 'Add a caption');
+  });
+
+  // The picker's file-type filter is only a hint: "All files" on Android ignores it.
+  test('a file type outside the list is refused when picked, with what can be sent instead', async ({ page }) => {
+    await openChat(page);
+    const signing = stubUploadUrl(page);
+
+    await attach(page, { name: 'party.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
+
+    await expect(page.getByTestId('composerError')).toContainText("That file type can't be sent.");
+    await expect(page.getByTestId('pendingAttachment')).toHaveCount(0);
+    expect(signing.count).toBe(0);
+  });
+
+  // `capture` is what makes a phone open its camera rather than the gallery.
+  test('Camera asks the browser for the camera', async ({ page }) => {
+    await openChat(page);
+
+    await page.getByTestId('attachButton').click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByTestId('attach-camera').click();
+
+    expect(await (await chooser).element().getAttribute('capture')).toBe('environment');
+  });
+});
+
 test.describe('sending an attachment', () => {
   test('the file is signed for, stored, then announced on the channel', async ({ page }) => {
     const socket = await openChat(page);
@@ -180,7 +287,7 @@ test.describe('sending an attachment', () => {
 
     const signed = page.waitForRequest((request) => request.url().includes('upload-url'));
     await attach(page, PNG_FIXTURE);
-    await expect(page.getByTestId('pendingAttachmentName')).toHaveText(PNG_FIXTURE.name);
+    await expect(page.getByTestId('pendingImagePreview')).toHaveAttribute('alt', PNG_FIXTURE.name);
     await page.getByTestId('sendButton').click();
 
     // The three values the server validates. content_type also decides the object's extension.
@@ -253,7 +360,7 @@ test.describe('when an attachment fails', () => {
     await page.getByTestId('sendButton').click();
     await expect(page.getByTestId('composerError')).toBeVisible();
 
-    await expect(page.getByTestId('pendingAttachmentName')).toHaveText(PNG_FIXTURE.name);
+    await expect(page.getByTestId('pendingImagePreview')).toHaveAttribute('alt', PNG_FIXTURE.name);
     await expect(page.getByTestId('sendButton')).toHaveAttribute('aria-label', 'retry sending');
 
     const signing = stubUploadUrl(page);
@@ -346,7 +453,8 @@ test.describe('sharing a location', () => {
   test('the coordinates go to the server and a map link appears', async ({ page }) => {
     const socket = await openChat(page);
 
-    await page.getByTestId('locationButton').click();
+    await page.getByTestId('attachButton').click();
+    await page.getByTestId('attach-location').click();
 
     expect(await socket.waitForPush('new_location_message')).toEqual({
       latitude: 12.9716,
@@ -365,7 +473,8 @@ test.describe('when location is refused', () => {
   test('the refusal is explained and nothing is sent', async ({ page }) => {
     const socket = await openChat(page);
 
-    await page.getByTestId('locationButton').click();
+    await page.getByTestId('attachButton').click();
+    await page.getByTestId('attach-location').click();
 
     await expect(page.getByTestId('composerError')).toBeVisible();
     expect(socket.payloadsFor('new_location_message')).toHaveLength(0);
