@@ -4,8 +4,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { clearWebChannelSession } from '@/services/webChannelAuth';
 import { uploadMedia } from '@/services/webChannelMedia';
-import { pushNewMediaMessage, pushNewLocationMessage, pushStartFlow } from '@/services/webChannelSocket';
-import { hasStartedFromLink, markStartedFromLink } from '@/lib/chatLink';
+import { pushNewMediaMessage, pushNewLocationMessage, pushNewMessage } from '@/services/webChannelSocket';
+import { hasTriggeredKeyword, markKeywordTriggered } from '@/lib/triggerKeywords';
 import { Chat } from './Chat';
 import { About } from './About';
 
@@ -35,7 +35,6 @@ vi.mock('@/services/webChannelSocket', () => ({
   pushNewMessage: vi.fn(() => Promise.resolve()),
   pushNewMediaMessage: vi.fn(() => Promise.resolve()),
   pushNewLocationMessage: vi.fn(() => Promise.resolve()),
-  pushStartFlow: vi.fn(() => Promise.resolve({ started: true })),
 }));
 
 // Only the upload is stubbed: the accept list and the error copy are what the composer is being
@@ -69,7 +68,7 @@ vi.mock('@/hooks/useAudioRecorder', () => ({
 const mockedUpload = uploadMedia as unknown as ReturnType<typeof vi.fn>;
 const mockedMediaPush = pushNewMediaMessage as unknown as ReturnType<typeof vi.fn>;
 const mockedLocationPush = pushNewLocationMessage as unknown as ReturnType<typeof vi.fn>;
-const mockedStartFlow = pushStartFlow as unknown as ReturnType<typeof vi.fn>;
+const mockedNewMessage = pushNewMessage as unknown as ReturnType<typeof vi.fn>;
 
 const hosted = { url: 'https://cdn.test/cat.png', content_type: 'image/png' };
 const file = new File(['bytes'], 'cat.png', { type: 'image/png' });
@@ -360,7 +359,8 @@ describe('the chat header and menu', () => {
 });
 
 describe('<Chat /> opened from a link', () => {
-  const linkWith = (link: object) => sessionStorage.setItem('glific_web_chat_link', JSON.stringify(link));
+  const linkWith = (keywords: object) =>
+    sessionStorage.setItem('glific_web_auto_trigger_keywords', JSON.stringify(keywords));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -373,52 +373,45 @@ describe('<Chat /> opened from a link', () => {
     await renderChat();
 
     await waitFor(() => expect(screen.getByTestId('composerInput')).toHaveValue('I want to volunteer'));
-    expect(mockedStartFlow).not.toHaveBeenCalled();
+    expect(mockedNewMessage).not.toHaveBeenCalled();
     expect(screen.queryByTestId('webChannelMessage')).not.toBeInTheDocument();
   });
 
-  it('starts the flow for ?start=, shows the keyword as sent, and records it', async () => {
+  // Sent like a typed message, so the server matches it against web flows' keywords.
+  it('sends ?start= as the contact\'s message, shows it, and records it', async () => {
     linkWith({ start: 'adopt' });
     await renderChat();
 
-    await waitFor(() => expect(mockedStartFlow).toHaveBeenCalledWith({ id: 'ch' }, 'adopt'));
+    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalledWith({ id: 'ch' }, 'adopt'));
     expect(await screen.findByTestId('content')).toHaveTextContent('adopt');
-    expect(hasStartedFromLink(1, 'adopt')).toBe(true);
+    expect(hasTriggeredKeyword(1, 'adopt')).toBe(true);
   });
 
-  it('does not start a flow a link already started for this contact', async () => {
-    markStartedFromLink(1, 'adopt');
+  it('does not send a keyword a link already sent for this contact', async () => {
+    markKeywordTriggered(1, 'adopt');
     linkWith({ start: 'adopt' });
     await renderChat();
 
     await screen.findByTestId('composerInput');
-    expect(mockedStartFlow).not.toHaveBeenCalled();
+    expect(mockedNewMessage).not.toHaveBeenCalled();
   });
 
-  // A value that isn't a web flow's keyword does nothing, and is not retried on the next visit.
-  it('shows nothing when the server finds no web flow for the keyword, and does not retry it', async () => {
-    mockedStartFlow.mockResolvedValueOnce({ started: false, reason: 'not_a_web_flow_keyword' });
-    linkWith({ start: 'hello' });
-    await renderChat();
-
-    await waitFor(() => expect(mockedStartFlow).toHaveBeenCalled());
-    await waitFor(() => expect(hasStartedFromLink(1, 'hello')).toBe(true));
-    expect(screen.queryByTestId('webChannelMessage')).not.toBeInTheDocument();
-  });
-
-  it('leaves a keyword unrecorded when the server never answered, so a later visit can try again', async () => {
-    mockedStartFlow.mockRejectedValueOnce(new Error('start_flow timeout'));
+  // Refused (rate limited, blocked) or never answered: the next visit may succeed.
+  it('shows nothing and leaves the keyword unrecorded when the send fails, so it is tried again', async () => {
+    mockedNewMessage.mockRejectedValueOnce({ reason: 'rate_limited' });
     linkWith({ start: 'adopt' });
     await renderChat();
 
-    await waitFor(() => expect(mockedStartFlow).toHaveBeenCalled());
-    expect(hasStartedFromLink(1, 'adopt')).toBe(false);
+    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(hasTriggeredKeyword(1, 'adopt')).toBe(false);
+    expect(screen.queryByTestId('webChannelMessage')).not.toBeInTheDocument();
   });
 
   it('does nothing without a link', async () => {
     await renderChat();
 
     expect(screen.getByTestId('composerInput')).toHaveValue('');
-    expect(mockedStartFlow).not.toHaveBeenCalled();
+    expect(mockedNewMessage).not.toHaveBeenCalled();
   });
 });

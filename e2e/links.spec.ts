@@ -6,8 +6,8 @@ import { tokenExpiringIn } from './support/token';
 import { mockPhoenix } from './support/socket';
 
 /**
- * Links an organisation shares to its web chat: `?text=` pre-fills the composer, `?start=` starts a
- * web flow by keyword, once. The socket and auth are stubbed; what is real is that the link
+ * Links an organisation shares to its web chat: `?text=` pre-fills the composer, `?start=` sends a
+ * keyword as the contact's message, once. The socket and auth are stubbed; what is real is that the link
  * survives the redirects and the login in between.
  */
 
@@ -52,13 +52,32 @@ test.describe('a ?start= link', () => {
 
     await page.goto('/?start=Adopt');
 
-    expect(await socket.waitForPush('start_flow')).toEqual({ keyword: 'adopt' });
+    expect(await socket.waitForPush('new_message')).toEqual({ body: 'adopt' });
     await expect(page.getByTestId('content')).toHaveText('adopt');
 
     await page.reload();
     await expect(page.getByTestId('connectionStatus')).toHaveText('online');
     await page.waitForTimeout(300);
-    expect(socket.payloadsFor('start_flow')).toHaveLength(1);
+    expect(socket.payloadsFor('new_message')).toHaveLength(1);
+  });
+
+  // The common case for a shared link: the person isn't signed in yet.
+  test('starts the flow after signing in first, without the person typing', async ({ page }) => {
+    await serveBranding(page, DARK_ACCENT_ORG);
+    await serveOtpRequested(page);
+    await serveOtpVerified(page, tokenExpiringIn(3600));
+    const socket = await mockPhoenix(page);
+
+    await page.goto('/?start=adopt');
+    await expect(page).toHaveURL(/\/login$/);
+    expect(socket.payloadsFor('new_message')).toHaveLength(0);
+
+    await submitPhone(page);
+    await submitOtp(page, '123456');
+
+    expect(await socket.waitForPush('new_message')).toEqual({ body: 'adopt' });
+    await expect(page.getByTestId('content')).toHaveText('adopt');
+    await expect(page.getByTestId('composerInput')).toHaveValue('');
   });
 
   test('does not start it again when the same link is opened later', async ({ page }) => {
@@ -66,23 +85,27 @@ test.describe('a ?start= link', () => {
     const socket = await mockPhoenix(page);
 
     await page.goto('/?start=adopt');
-    await socket.waitForPush('start_flow');
+    await socket.waitForPush('new_message');
 
     await page.goto('/?start=adopt');
     await expect(page.getByTestId('connectionStatus')).toHaveText('online');
     await page.waitForTimeout(300);
-    expect(socket.payloadsFor('start_flow')).toHaveLength(1);
+    expect(socket.payloadsFor('new_message')).toHaveLength(1);
   });
 
-  test('a keyword the server finds no web flow for shows nothing', async ({ page }) => {
+  // A refused send (rate limited, say) is not recorded, so opening the link again tries again.
+  test('a keyword the server refuses is tried again the next time the link is opened', async ({ page }) => {
     await signedIn(page);
-    const socket = await mockPhoenix(page, { failOn: ['start_flow'] });
+    const socket = await mockPhoenix(page, { failOn: ['new_message'] });
 
-    await page.goto('/?start=hello');
-
-    await socket.waitForPush('start_flow');
-    await page.waitForTimeout(300);
+    await page.goto('/?start=adopt');
+    await socket.waitForPush('new_message');
     await expect(page.getByTestId('webChannelMessage')).toHaveCount(0);
-    expect(socket.payloadsFor('new_message')).toHaveLength(0);
+
+    socket.recover('new_message');
+    await page.goto('/?start=adopt');
+
+    await expect(page.getByTestId('content')).toHaveText('adopt');
+    expect(socket.payloadsFor('new_message')).toHaveLength(2);
   });
 });

@@ -5,7 +5,7 @@ import { BrowserRouter } from 'react-router';
 import './index.css';
 import App from './App.tsx';
 import { loadBranding } from '@/services/branding';
-import { captureChatLink } from '@/lib/chatLink';
+import { captureTriggerKeywords } from '@/lib/triggerKeywords';
 import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
 
 // Branding resolves BEFORE the first render, so the org's accent is already on :root by the
@@ -15,7 +15,7 @@ import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
 // the default palette would serve a Glific-looking page under the NGO's own domain, which reads
 // as the wrong organisation rather than as a failure.
 const bootstrap = async () => {
-  captureChatLink();
+  captureTriggerKeywords();
   const status = await loadBranding();
 
   createRoot(document.getElementById('root')!).render(

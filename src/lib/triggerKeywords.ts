@@ -1,13 +1,12 @@
 // Links an organisation shares to its web chat can carry a message, the way wa.me links do:
 //
 //   ?text=Hello   opens the chat with "Hello" in the composer, for the contact to send
-//   ?start=adopt  starts the web flow whose keyword is "adopt", once
+//   ?start=adopt  sends "adopt" for the contact once the chat opens, so its flow starts
 //
-// Free text is only ever pre-filled, never sent on the contact's behalf, so a link can't make
-// someone send a message they didn't choose. Only `start` sends anything, and the server starts a
-// flow for it only if it is a web flow's keyword.
+// `text` is only ever pre-filled; `start` is sent as the contact's message, once. A keyword only
+// starts a flow if it is a web flow's: the server matches keywords on the message's channel.
 
-export interface ChatLink {
+export interface TriggerKeywords {
   text?: string;
   start?: string;
 }
@@ -15,9 +14,9 @@ export interface ChatLink {
 // sessionStorage, not memory: a contact who isn't signed in goes through the login screen (and,
 // for an organisation's own login, possibly another site) before reaching the chat, and the tab
 // is the one thing that survives all of it.
-const PENDING_KEY = 'glific_web_chat_link';
-// localStorage, so a flow a link started stays started across reloads and later visits.
-const STARTED_KEY = 'glific_web_link_started';
+const AUTO_TRIGGER_KEYWORDS = 'glific_web_auto_trigger_keywords';
+// localStorage, so a keyword a link sent is not sent again on a reload or a later visit.
+const TRIGGERED_KEYWORDS = 'glific_web_triggered_keywords';
 
 // The server refuses a message body over this length.
 export const MAX_TEXT_LENGTH = 4096;
@@ -37,13 +36,13 @@ const cleanKeyword = (value: string | null) => {
  * and drops its query. Keeps them for the chat to pick up, and takes them off the address bar so
  * a reload or a bookmark of the current page doesn't carry them again.
  */
-export const captureChatLink = (location: Location = window.location, history: History = window.history): void => {
+export const captureTriggerKeywords = (location: Location = window.location, history: History = window.history): void => {
   const params = new URLSearchParams(location.search);
-  const link: ChatLink = { text: cleanText(params.get('text')), start: cleanKeyword(params.get('start')) };
+  const link: TriggerKeywords = { text: cleanText(params.get('text')), start: cleanKeyword(params.get('start')) };
 
   if (!params.has('text') && !params.has('start')) return;
 
-  if (link.text || link.start) sessionStorage.setItem(PENDING_KEY, JSON.stringify(link));
+  if (link.text || link.start) sessionStorage.setItem(AUTO_TRIGGER_KEYWORDS, JSON.stringify(link));
 
   params.delete('text');
   params.delete('start');
@@ -52,34 +51,34 @@ export const captureChatLink = (location: Location = window.location, history: H
 };
 
 /** The link waiting for the chat, removed as it is read so it applies once. */
-export const takeChatLink = (): ChatLink | null => {
-  const raw = sessionStorage.getItem(PENDING_KEY);
-  sessionStorage.removeItem(PENDING_KEY);
+export const takeTriggerKeywords = (): TriggerKeywords | null => {
+  const raw = sessionStorage.getItem(AUTO_TRIGGER_KEYWORDS);
+  sessionStorage.removeItem(AUTO_TRIGGER_KEYWORDS);
   if (!raw) return null;
 
   try {
-    return JSON.parse(raw) as ChatLink;
+    return JSON.parse(raw) as TriggerKeywords;
   } catch {
     return null;
   }
 };
 
-const startedKeywords = (): Record<string, string[]> => {
+const triggeredKeywords = (): Record<string, string[]> => {
   try {
-    return JSON.parse(localStorage.getItem(STARTED_KEY) ?? '{}');
+    return JSON.parse(localStorage.getItem(TRIGGERED_KEYWORDS) ?? '{}');
   } catch {
     return {};
   }
 };
 
-/** Whether a link already started this keyword for this contact. */
-export const hasStartedFromLink = (contactId: string | number, keyword: string): boolean =>
-  startedKeywords()[String(contactId)]?.includes(keyword) ?? false;
+/** Whether a link already sent this keyword for this contact. */
+export const hasTriggeredKeyword = (contactId: string | number, keyword: string): boolean =>
+  triggeredKeywords()[String(contactId)]?.includes(keyword) ?? false;
 
-export const markStartedFromLink = (contactId: string | number, keyword: string): void => {
-  const started = startedKeywords();
+export const markKeywordTriggered = (contactId: string | number, keyword: string): void => {
+  const started = triggeredKeywords();
   const forContact = started[String(contactId)] ?? [];
   if (forContact.includes(keyword)) return;
 
-  localStorage.setItem(STARTED_KEY, JSON.stringify({ ...started, [String(contactId)]: [...forContact, keyword] }));
+  localStorage.setItem(TRIGGERED_KEYWORDS, JSON.stringify({ ...started, [String(contactId)]: [...forContact, keyword] }));
 };
