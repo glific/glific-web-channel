@@ -59,7 +59,8 @@ export const ComposerInput = ({ value, placeholder, onChange, onSubmit }: Compos
         }
       }}
       className={cn(
-        'block min-w-0 flex-1 resize-none rounded-2xl border border-input bg-transparent px-3 py-2 text-base leading-6 transition-colors outline-none',
+        // 40px on one line (24 + 2×7 + 2×1), the composer buttons' height, so they line up with it.
+        'block min-w-0 flex-1 resize-none rounded-2xl border border-input bg-transparent px-3 py-[7px] text-base leading-6 transition-colors outline-none',
         'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
       )}
     />

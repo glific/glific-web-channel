@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Mic, MoreVertical, Plus, Send, Trash2 } from 'lucide-react';
 import type { Channel, Socket } from 'phoenix';
@@ -36,6 +36,9 @@ const CONNECTION_LABELS: Record<string, string> = {
   reconnecting: 'reconnecting…',
 };
 
+// How close to the bottom, in px, still counts as reading the newest message.
+const FOLLOW_THRESHOLD_PX = 48;
+
 const STATUS_LABELS: Record<string, string> = {
   uploading: 'Uploading…',
   sending: 'Sending…',
@@ -66,6 +69,11 @@ export const Chat = () => {
   // track seen ids so an echoed "new_message" push never duplicates an already-rendered message
   const seenIds = useRef<Set<string>>(new Set());
 
+  // Whether the conversation follows its newest message. True until the contact scrolls up to
+  // read history, so a reply, a growing composer or a late-loading image never leaves the newest
+  // message half hidden, while someone reading older messages is not pulled back down.
+  const followNewest = useRef(true);
+
   const scrollToBottom = () => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -82,6 +90,7 @@ export const Chat = () => {
       inserted_at: new Date().toISOString(),
     };
     seenIds.current.add(String(local.id));
+    followNewest.current = true;
     setMessages((prev) => [...prev, local]);
     requestAnimationFrame(scrollToBottom);
   }, []);
@@ -145,6 +154,29 @@ export const Chat = () => {
     else location.share();
   };
   const composerError = media.error ?? recorder.error ?? location.error;
+
+  useLayoutEffect(() => {
+    if (followNewest.current) scrollToBottom();
+  }, [messages]);
+
+  // The list's own size changes as the composer grows and shrinks, and a bubble's as its image or
+  // video loads; neither re-renders, so each is followed here.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return undefined;
+
+    const follow = () => {
+      if (followNewest.current) scrollToBottom();
+    };
+    const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(follow);
+    resizes?.observe(el);
+    el.addEventListener('load', follow, true);
+
+    return () => {
+      resizes?.disconnect();
+      el.removeEventListener('load', follow, true);
+    };
+  }, []);
 
   // A link's keywords, once the chat has joined (see lib/triggerKeywords). `text` is only ever
   // pre-filled; `start` is sent as the contact's message, once per contact.
@@ -220,6 +252,7 @@ export const Chat = () => {
   // reverse-infinite scroll: prepend older page when the user scrolls to the top
   const handleScroll = () => {
     const el = listRef.current;
+    if (el) followNewest.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD_PX;
     if (!el || el.scrollTop > 0 || loadingMore || reachedStart || !channelRef.current) return;
 
     setLoadingMore(true);
@@ -393,6 +426,7 @@ export const Chat = () => {
               ref={attachButtonRef}
               variant="ghost"
               size="icon"
+              className="size-10"
               aria-label="attach"
               aria-haspopup="menu"
               aria-expanded={attachOpen}
@@ -412,6 +446,7 @@ export const Chat = () => {
             {!hasContent && recorder.isSupported ? (
               <Button
                 size="icon"
+                className="size-10"
                 aria-label="record voice note"
                 data-testid="recordButton"
                 onClick={recorder.start}
@@ -422,6 +457,7 @@ export const Chat = () => {
             ) : (
               <Button
                 size="icon"
+                className="size-10"
                 aria-label={media.status === 'failed' ? 'retry sending' : 'send message'}
                 data-testid="sendButton"
                 onClick={handleSend}
