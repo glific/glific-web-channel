@@ -15,7 +15,7 @@ It talks to the Glific backend over **REST** (OTP auth) and a **Phoenix websocke
 - **react-hook-form + zod** (forms/validation)
 - **phoenix** JS client (realtime), **axios** (REST)
 - **Vitest + React Testing Library** (tests)
-- Package manager: **yarn** · Node pinned via `.tool-versions` (24.20.0)
+- Package manager: **yarn** · Node pinned via `.tool-versions` (24.22.1)
 
 ## Getting started
 
@@ -181,7 +181,7 @@ This repo is configured for [Vercel](https://vercel.com) as a static Vite SPA (`
    Apply them to **Production** (and Preview if previews should hit a real backend).
 4. Deploy. Client-side routes (`/login`, `/chat`) are rewritten to `index.html` so hard refreshes work.
 
-Node **24.20.0** is pinned via `.nvmrc` and `package.json` `engines`.
+Node **24.22.1** is pinned via `.nvmrc` and `package.json` `engines`.
 
 ## Structure
 
