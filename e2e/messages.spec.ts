@@ -1,9 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from "@playwright/test";
 
-import { DARK_ACCENT_ORG, serveBranding } from './support/branding';
-import { seedSession } from './support/auth';
-import { tokenExpiringIn } from './support/token';
-import { mockPhoenix, type MockPhoenix } from './support/socket';
+import { DARK_ACCENT_ORG, serveBranding } from "./support/branding";
+import { seedSession } from "./support/auth";
+import { tokenExpiringIn } from "./support/token";
+import { mockPhoenix, type MockPhoenix } from "./support/socket";
 import {
   HOSTED_URL,
   PDF_FIXTURE,
@@ -12,7 +12,7 @@ import {
   stubStoragePutFailure,
   stubUploadUrl,
   stubUploadUrlError,
-} from './support/media';
+} from "./support/media";
 
 /**
  * Sending from the chat — glific#5714 and its widget half.
@@ -25,127 +25,271 @@ import {
 const CONTACT_ID = 42;
 
 // Signed in and joined, which every journey below starts from.
-const openChat = async (page: Page, options: Parameters<typeof mockPhoenix>[1] = {}): Promise<MockPhoenix> => {
+const openChat = async (
+  page: Page,
+  options: Parameters<typeof mockPhoenix>[1] = {},
+): Promise<MockPhoenix> => {
   await serveBranding(page, DARK_ACCENT_ORG);
   await seedSession(page, tokenExpiringIn(3600), CONTACT_ID);
   const socket = await mockPhoenix(page, options);
 
-  await page.goto('/chat');
-  await expect(page.getByTestId('webChannelChat')).toBeVisible();
+  await page.goto("/chat");
+  await expect(page.getByTestId("webChannelChat")).toBeVisible();
   // The header reads "online" only once the join is acknowledged; without waiting, a send races
   // the channel.
-  await expect(page.getByTestId('connectionStatus')).toHaveText('online');
+  await expect(page.getByTestId("connectionStatus")).toHaveText("online");
 
   return socket;
 };
 
-const attach = (page: Page, file: typeof PNG_FIXTURE) => page.getByTestId('fileInput').setInputFiles(file);
+const attach = (page: Page, file: typeof PNG_FIXTURE) =>
+  page.getByTestId("fileInput").setInputFiles(file);
 
 // Measured in the browser: the field's height comes from layout, which jsdom does not do.
-test.describe('the message field', () => {
+test.describe("the message field", () => {
   const height = (page: Page) =>
-    page.getByTestId('composerInput').evaluate((field) => field.getBoundingClientRect().height);
+    page
+      .getByTestId("composerInput")
+      .evaluate((field) => field.getBoundingClientRect().height);
 
-  test('grows with long text, up to six lines, then scrolls within itself', async ({ page }) => {
+  test("grows with long text, up to six lines, then scrolls within itself", async ({
+    page,
+  }) => {
     await openChat(page);
-    const composer = page.getByTestId('composerInput');
+    const composer = page.getByTestId("composerInput");
     const empty = await height(page);
 
-    await composer.fill('We live in a 2BHK on the third floor with a small balcony. No other pets right now.');
+    await composer.fill(
+      "We live in a 2BHK on the third floor with a small balcony. No other pets right now.",
+    );
     const twoOrThreeLines = await height(page);
     expect(twoOrThreeLines).toBeGreaterThan(empty * 1.5);
 
-    await composer.fill(Array.from({ length: 12 }, (_, line) => `Line ${line + 1}`).join('\n'));
+    await composer.fill(
+      Array.from({ length: 12 }, (_, line) => `Line ${line + 1}`).join("\n"),
+    );
     const capped = await height(page);
-    const lineHeight = await composer.evaluate((field) => parseFloat(getComputedStyle(field).lineHeight));
+    const lineHeight = await composer.evaluate((field) =>
+      parseFloat(getComputedStyle(field).lineHeight),
+    );
     expect(capped).toBeLessThanOrEqual(lineHeight * 6 + empty - lineHeight + 1);
     expect(capped).toBeGreaterThan(lineHeight * 5);
-    expect(await composer.evaluate((field) => field.scrollHeight > field.clientHeight)).toBe(true);
-    await expect(composer).toHaveCSS('overflow-y', 'auto');
+    expect(
+      await composer.evaluate(
+        (field) => field.scrollHeight > field.clientHeight,
+      ),
+    ).toBe(true);
+    await expect(composer).toHaveCSS("overflow-y", "auto");
 
     // Back to one line once the message is sent and the field clears.
-    await page.getByTestId('sendButton').click();
-    await expect(composer).toHaveValue('');
+    await page.getByTestId("sendButton").click();
+    await expect(composer).toHaveValue("");
     expect(await height(page)).toBe(empty);
   });
 
   // The buttons stay on the bottom line, next to where the cursor is, as the field grows.
-  test('keeps the send button level with the bottom of a grown field', async ({ page }) => {
+  test("keeps the send button level with the bottom of a grown field", async ({
+    page,
+  }) => {
     await openChat(page);
-    await page.getByTestId('composerInput').fill(Array.from({ length: 4 }, () => 'A long line of text').join('\n'));
+    await page
+      .getByTestId("composerInput")
+      .fill(Array.from({ length: 4 }, () => "A long line of text").join("\n"));
 
-    const field = (await page.getByTestId('composerInput').boundingBox())!;
-    const send = (await page.getByTestId('sendButton').boundingBox())!;
-    expect(Math.abs(field.y + field.height - (send.y + send.height))).toBeLessThan(8);
+    const field = (await page.getByTestId("composerInput").boundingBox())!;
+    const send = (await page.getByTestId("sendButton").boundingBox())!;
+    expect(
+      Math.abs(field.y + field.height - (send.y + send.height)),
+    ).toBeLessThan(8);
   });
 });
 
-test.describe('sending a text message', () => {
-  test('the message goes on the wire and appears in the conversation', async ({ page }) => {
-    const socket = await openChat(page);
+// Enough history to fill the screen, so following the newest message actually needs a scroll.
+const LONG_HISTORY = Array.from({ length: 30 }, (_, i) => ({
+  id: i + 1,
+  body: `History message number ${i + 1}, long enough to wrap onto a second line in the bubble.`,
+  flow: i % 2 ? "inbound" : "outbound",
+  inserted_at: `2026-09-01T10:${String(i).padStart(2, "0")}:00Z`,
+}));
 
-    await page.getByTestId('composerInput').fill('Hello from the widget');
-    await page.getByTestId('sendButton').click();
-
-    expect(await socket.waitForPush('new_message')).toEqual({ body: 'Hello from the widget' });
-    await expect(page.getByTestId('webChannelMessage')).toHaveCount(1);
-    await expect(page.getByTestId('content')).toHaveText('Hello from the widget');
+// How much of the newest bubble is inside the visible message list: 1 is all of it.
+const newestBubbleVisible = (page: Page) =>
+  page.evaluate(() => {
+    const list = document
+      .querySelector('[data-testid="messageList"]')!
+      .getBoundingClientRect();
+    const bubbles = document.querySelectorAll(
+      '[data-testid="webChannelMessage"]',
+    );
+    const newest = bubbles[bubbles.length - 1].getBoundingClientRect();
+    const visible = Math.max(
+      0,
+      Math.min(newest.bottom, list.bottom) - Math.max(newest.top, list.top),
+    );
+    return visible / newest.height;
   });
 
-  test('the composer clears, so the next message starts empty', async ({ page }) => {
+test.describe("following the newest message", () => {
+  test("a reply that arrives while reading the newest message is shown in full", async ({
+    page,
+  }) => {
+    const socket = await openChat(page, { messages: LONG_HISTORY });
+
+    socket.sendToClient("new_message", {
+      id: 999,
+      body: "A reply from the organisation",
+      flow: "outbound",
+      inserted_at: new Date().toISOString(),
+    });
+
+    await expect(page.getByText("A reply from the organisation")).toBeVisible();
+    await expect.poll(() => newestBubbleVisible(page)).toBe(1);
+  });
+
+  test("a growing draft does not hide the newest message behind the composer", async ({
+    page,
+  }) => {
+    await openChat(page, { messages: LONG_HISTORY });
+
+    await page
+      .getByTestId("composerInput")
+      .fill("line 1\nline 2\nline 3\nline 4\nline 5");
+
+    await expect.poll(() => newestBubbleVisible(page)).toBe(1);
+  });
+
+  // Someone scrolled up to read history is not pulled back down by a reply.
+  test("a reply does not pull someone reading older messages back down", async ({
+    page,
+  }) => {
+    const socket = await openChat(page, { messages: LONG_HISTORY });
+    const list = page.getByTestId("messageList");
+    await list.evaluate((el) => {
+      el.scrollTop = el.scrollHeight / 2;
+      el.dispatchEvent(new Event("scroll"));
+    });
+    const readingAt = await list.evaluate((el) => el.scrollTop);
+
+    socket.sendToClient("new_message", {
+      id: 999,
+      body: "A reply",
+      flow: "outbound",
+      inserted_at: new Date().toISOString(),
+    });
+    await expect(page.getByText("A reply", { exact: true })).toHaveCount(1);
+
+    expect(await list.evaluate((el) => el.scrollTop)).toBe(readingAt);
+  });
+
+  test("the composer buttons line up with a one-line message field", async ({
+    page,
+  }) => {
+    await openChat(page);
+    const centre = (testId: string) =>
+      page.getByTestId(testId).evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return Math.round(box.top + box.height / 2);
+      });
+
+    const field = await centre("composerInput");
+    expect(await centre("attachButton")).toBe(field);
+    expect(
+      await centre(
+        (await page.getByTestId("recordButton").count())
+          ? "recordButton"
+          : "sendButton",
+      ),
+    ).toBe(field);
+  });
+});
+
+test.describe("sending a text message", () => {
+  test("the message goes on the wire and appears in the conversation", async ({
+    page,
+  }) => {
+    const socket = await openChat(page);
+
+    await page.getByTestId("composerInput").fill("Hello from the widget");
+    await page.getByTestId("sendButton").click();
+
+    expect(await socket.waitForPush("new_message")).toEqual({
+      body: "Hello from the widget",
+    });
+    await expect(page.getByTestId("webChannelMessage")).toHaveCount(1);
+    await expect(page.getByTestId("content")).toHaveText(
+      "Hello from the widget",
+    );
+  });
+
+  test("the composer clears, so the next message starts empty", async ({
+    page,
+  }) => {
     await openChat(page);
 
-    await page.getByTestId('composerInput').fill('First');
-    await page.getByTestId('sendButton').click();
+    await page.getByTestId("composerInput").fill("First");
+    await page.getByTestId("sendButton").click();
 
-    await expect(page.getByTestId('composerInput')).toHaveValue('');
+    await expect(page.getByTestId("composerInput")).toHaveValue("");
   });
 
-  test('Enter sends without reaching for the button, on a keyboard', async ({ page }, testInfo) => {
-    test.skip(!!testInfo.project.use.hasTouch, 'on a phone Enter starts a new line instead');
+  test("Enter sends without reaching for the button, on a keyboard", async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      !!testInfo.project.use.hasTouch,
+      "on a phone Enter starts a new line instead",
+    );
     const socket = await openChat(page);
 
-    await page.getByTestId('composerInput').fill('Sent with the keyboard');
-    await page.getByTestId('composerInput').press('Enter');
+    await page.getByTestId("composerInput").fill("Sent with the keyboard");
+    await page.getByTestId("composerInput").press("Enter");
 
-    expect(await socket.waitForPush('new_message')).toEqual({ body: 'Sent with the keyboard' });
+    expect(await socket.waitForPush("new_message")).toEqual({
+      body: "Sent with the keyboard",
+    });
   });
 
   // A phone keyboard has no Shift+Enter, so its Enter key is the only way to break a line.
-  test('Enter starts a new line on a phone, and the send button sends', async ({ page }, testInfo) => {
-    test.skip(!testInfo.project.use.hasTouch, 'with a keyboard Enter sends');
+  test("Enter starts a new line on a phone, and the send button sends", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!testInfo.project.use.hasTouch, "with a keyboard Enter sends");
     const socket = await openChat(page);
-    const composer = page.getByTestId('composerInput');
+    const composer = page.getByTestId("composerInput");
 
-    await composer.fill('First line');
-    await composer.press('Enter');
-    await composer.pressSequentially('Second line');
-    await expect(composer).toHaveValue('First line\nSecond line');
+    await composer.fill("First line");
+    await composer.press("Enter");
+    await composer.pressSequentially("Second line");
+    await expect(composer).toHaveValue("First line\nSecond line");
 
-    await page.getByTestId('sendButton').click();
-    expect(await socket.waitForPush('new_message')).toEqual({ body: 'First line\nSecond line' });
+    await page.getByTestId("sendButton").click();
+    expect(await socket.waitForPush("new_message")).toEqual({
+      body: "First line\nSecond line",
+    });
   });
 
-  test('Shift+Enter starts a new line without sending', async ({ page }) => {
+  test("Shift+Enter starts a new line without sending", async ({ page }) => {
     await openChat(page);
-    const composer = page.getByTestId('composerInput');
+    const composer = page.getByTestId("composerInput");
 
-    await composer.fill('First line');
-    await composer.press('Shift+Enter');
-    await composer.pressSequentially('Second line');
+    await composer.fill("First line");
+    await composer.press("Shift+Enter");
+    await composer.pressSequentially("Second line");
 
-    await expect(composer).toHaveValue('First line\nSecond line');
-    await expect(page.getByTestId('webChannelMessage')).toHaveCount(0);
+    await expect(composer).toHaveValue("First line\nSecond line");
+    await expect(page.getByTestId("webChannelMessage")).toHaveCount(0);
   });
 
   // Whitespace would reach the server as an empty message and render as an empty bubble. As in
   // WhatsApp, the mic stands in for Send until there is something to send — but only where the
   // browser can record a format the server accepts. Elsewhere (WebKit on Linux, in CI) there is no
   // mic, and Send shows disabled instead.
-  test('an empty or whitespace-only draft offers the mic, or a disabled Send, never a live Send', async ({ page }) => {
+  test("an empty or whitespace-only draft offers the mic, or a disabled Send, never a live Send", async ({
+    page,
+  }) => {
     await openChat(page);
-    const record = page.getByTestId('recordButton');
-    const send = page.getByTestId('sendButton');
+    const record = page.getByTestId("recordButton");
+    const send = page.getByTestId("sendButton");
     await expect(record.or(send)).toBeVisible();
     const canRecord = await record.isVisible();
 
@@ -159,324 +303,420 @@ test.describe('sending a text message', () => {
     };
 
     await expectNothingToSend();
-    await page.getByTestId('composerInput').fill('   ');
+    await page.getByTestId("composerInput").fill("   ");
     await expectNothingToSend();
 
-    await page.getByTestId('composerInput').fill('hi');
+    await page.getByTestId("composerInput").fill("hi");
     await expect(send).toBeEnabled();
     await expect(record).toHaveCount(0);
   });
 
   // Without recording support there must be no mic that can never produce a sendable voice note.
-  test('a browser that cannot record shows a disabled Send, not a mic', async ({ page }) => {
+  test("a browser that cannot record shows a disabled Send, not a mic", async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       // @ts-expect-error removing the API, the way a browser without it presents
       delete window.MediaRecorder;
     });
     await openChat(page);
 
-    await expect(page.getByTestId('recordButton')).toHaveCount(0);
-    await expect(page.getByTestId('sendButton')).toBeDisabled();
+    await expect(page.getByTestId("recordButton")).toHaveCount(0);
+    await expect(page.getByTestId("sendButton")).toBeDisabled();
 
-    await page.getByTestId('composerInput').fill('hi');
-    await expect(page.getByTestId('sendButton')).toBeEnabled();
+    await page.getByTestId("composerInput").fill("hi");
+    await expect(page.getByTestId("sendButton")).toBeEnabled();
   });
 
-  test('history from the join renders, oldest first', async ({ page }) => {
+  test("history from the join renders, oldest first", async ({ page }) => {
     await openChat(page, {
       messages: [
-        { id: 1, body: 'Older', flow: 'outbound', inserted_at: '2026-09-01T10:00:00Z' },
-        { id: 2, body: 'Newer', flow: 'inbound', inserted_at: '2026-09-01T10:01:00Z' },
+        {
+          id: 1,
+          body: "Older",
+          flow: "outbound",
+          inserted_at: "2026-09-01T10:00:00Z",
+        },
+        {
+          id: 2,
+          body: "Newer",
+          flow: "inbound",
+          inserted_at: "2026-09-01T10:01:00Z",
+        },
       ],
     });
 
-    await expect(page.getByTestId('content')).toHaveText(['Older', 'Newer']);
+    await expect(page.getByTestId("content")).toHaveText(["Older", "Newer"]);
   });
 
-  test('a reply pushed by the server arrives without a reload', async ({ page }) => {
+  test("a reply pushed by the server arrives without a reload", async ({
+    page,
+  }) => {
     const socket = await openChat(page);
 
-    socket.sendToClient('new_message', {
+    socket.sendToClient("new_message", {
       id: 99,
-      body: 'Thanks for getting in touch',
-      flow: 'outbound',
+      body: "Thanks for getting in touch",
+      flow: "outbound",
       inserted_at: new Date().toISOString(),
     });
 
-    await expect(page.getByTestId('content')).toHaveText('Thanks for getting in touch');
+    await expect(page.getByTestId("content")).toHaveText(
+      "Thanks for getting in touch",
+    );
   });
 });
 
-test.describe('the attach menu', () => {
-  test('+ slides up a sheet of Camera, Gallery, Document and Location; Escape or a tap behind it closes it', async ({
+test.describe("the attach menu", () => {
+  test("+ slides up a sheet of Camera, Gallery, Document and Location; Escape or a tap behind it closes it", async ({
     page,
   }) => {
     await openChat(page);
-    const sheet = page.getByTestId('attachMenu');
+    const sheet = page.getByTestId("attachMenu");
 
-    await page.getByTestId('attachButton').click();
-    await expect(page.getByRole('menuitem')).toHaveText(['Camera', 'Gallery', 'Document', 'Location']);
+    await page.getByTestId("attachButton").click();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "Camera",
+      "Gallery",
+      "Document",
+      "Location",
+    ]);
 
     // A bottom sheet: full width of the chat, flush with its bottom edge — measured once it has
     // finished sliding up, since the slide moves it with a transform.
-    await sheet.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
-    const chat = (await page.getByTestId('webChannelChat').boundingBox())!;
+    await sheet.evaluate((element) =>
+      Promise.all(
+        element.getAnimations().map((animation) => animation.finished),
+      ),
+    );
+    const chat = (await page.getByTestId("webChannelChat").boundingBox())!;
     const box = (await sheet.boundingBox())!;
     expect(Math.round(box.width)).toBe(Math.round(chat.width));
-    expect(Math.round(box.y + box.height)).toBe(Math.round(chat.y + chat.height));
+    expect(Math.round(box.y + box.height)).toBe(
+      Math.round(chat.y + chat.height),
+    );
 
-    await page.keyboard.press('Escape');
+    await page.keyboard.press("Escape");
     await expect(sheet).toHaveCount(0);
-    await expect(page.getByTestId('attachButton')).toBeFocused();
+    await expect(page.getByTestId("attachButton")).toBeFocused();
 
-    await page.getByTestId('attachButton').click();
-    await page.getByTestId('attachBackdrop').click({ position: { x: 20, y: 120 } });
+    await page.getByTestId("attachButton").click();
+    await page
+      .getByTestId("attachBackdrop")
+      .click({ position: { x: 20, y: 120 } });
     await expect(sheet).toHaveCount(0);
   });
 
-  test('Gallery opens the picker for supported photos and videos, and the picture is previewed before sending', async ({
+  test("Gallery opens the picker for supported photos and videos, and the picture is previewed before sending", async ({
     page,
   }) => {
     await openChat(page);
 
-    await page.getByTestId('attachButton').click();
-    const chooser = page.waitForEvent('filechooser');
-    await page.getByTestId('attach-gallery').click();
+    await page.getByTestId("attachButton").click();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByTestId("attach-gallery").click();
     const picker = await chooser;
 
-    const accept = (await picker.element().getAttribute('accept'))!;
-    expect(accept).toContain('image/jpeg');
-    expect(accept).toContain('video/mp4');
-    expect(accept).not.toContain('/*');
-    expect(await picker.element().getAttribute('capture')).toBeNull();
+    const accept = (await picker.element().getAttribute("accept"))!;
+    expect(accept).toContain("image/jpeg");
+    expect(accept).toContain("video/mp4");
+    expect(accept).not.toContain("/*");
+    expect(await picker.element().getAttribute("capture")).toBeNull();
 
     await picker.setFiles(PNG_FIXTURE);
-    await expect(page.getByTestId('pendingImagePreview')).toBeVisible();
-    await expect(page.getByTestId('composerInput')).toHaveAttribute('placeholder', 'Add a caption');
+    await expect(page.getByTestId("pendingImagePreview")).toBeVisible();
+    await expect(page.getByTestId("composerInput")).toHaveAttribute(
+      "placeholder",
+      "Add a caption",
+    );
   });
 
   // The picker's file-type filter is only a hint: "All files" on Android ignores it.
-  test('a file type outside the list is refused when picked, with what can be sent instead', async ({ page }) => {
+  test("a file type outside the list is refused when picked, with what can be sent instead", async ({
+    page,
+  }) => {
     await openChat(page);
     const signing = stubUploadUrl(page);
 
-    await attach(page, { name: 'party.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
+    await attach(page, {
+      name: "party.gif",
+      mimeType: "image/gif",
+      buffer: Buffer.from("GIF89a"),
+    });
 
-    await expect(page.getByTestId('composerError')).toContainText("That file type can't be sent.");
-    await expect(page.getByTestId('pendingAttachment')).toHaveCount(0);
+    await expect(page.getByTestId("composerError")).toContainText(
+      "That file type can't be sent.",
+    );
+    await expect(page.getByTestId("pendingAttachment")).toHaveCount(0);
     expect(signing.count).toBe(0);
   });
 
   // `capture` is what makes a phone open its camera rather than the gallery.
-  test('Camera asks the browser for the camera', async ({ page }) => {
+  test("Camera asks the browser for the camera", async ({ page }) => {
     await openChat(page);
 
-    await page.getByTestId('attachButton').click();
-    const chooser = page.waitForEvent('filechooser');
-    await page.getByTestId('attach-camera').click();
+    await page.getByTestId("attachButton").click();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByTestId("attach-camera").click();
 
-    expect(await (await chooser).element().getAttribute('capture')).toBe('environment');
+    expect(await (await chooser).element().getAttribute("capture")).toBe(
+      "environment",
+    );
   });
 });
 
-test.describe('sending an attachment', () => {
-  test('the file is signed for, stored, then announced on the channel', async ({ page }) => {
+test.describe("sending an attachment", () => {
+  test("the file is signed for, stored, then announced on the channel", async ({
+    page,
+  }) => {
     const socket = await openChat(page);
     const signing = stubUploadUrl(page);
     const storage = stubStoragePut(page);
 
-    const signed = page.waitForRequest((request) => request.url().includes('upload-url'));
+    const signed = page.waitForRequest((request) =>
+      request.url().includes("upload-url"),
+    );
     await attach(page, PNG_FIXTURE);
-    await expect(page.getByTestId('pendingImagePreview')).toHaveAttribute('alt', PNG_FIXTURE.name);
-    await page.getByTestId('sendButton').click();
+    await expect(page.getByTestId("pendingImagePreview")).toHaveAttribute(
+      "alt",
+      PNG_FIXTURE.name,
+    );
+    await page.getByTestId("sendButton").click();
 
     // The three values the server validates. content_type also decides the object's extension.
-    expect((await signed).postDataJSON()).toMatchObject({ type: 'image', content_type: 'image/png' });
+    expect((await signed).postDataJSON()).toMatchObject({
+      type: "image",
+      content_type: "image/png",
+    });
     expect((await signed).postDataJSON().size).toBeGreaterThan(0);
 
-    expect(await socket.waitForPush('new_media_message')).toMatchObject({ type: 'image', url: HOSTED_URL });
+    expect(await socket.waitForPush("new_media_message")).toMatchObject({
+      type: "image",
+      url: HOSTED_URL,
+    });
     expect(signing.count).toBe(1);
     expect(storage.count).toBe(1);
 
-    await expect(page.getByTestId('mediaContent')).toBeVisible();
-    await expect(page.getByTestId('pendingAttachment')).toHaveCount(0);
+    await expect(page.getByTestId("mediaContent")).toBeVisible();
+    await expect(page.getByTestId("pendingAttachment")).toHaveCount(0);
   });
 
-  test('a file the browser cannot classify is sent as a document', async ({ page }) => {
+  test("a file the browser cannot classify is sent as a document", async ({
+    page,
+  }) => {
     const socket = await openChat(page, {});
-    stubUploadUrl(page, 'application/pdf');
+    stubUploadUrl(page, "application/pdf");
     stubStoragePut(page);
 
     await attach(page, PDF_FIXTURE);
-    await page.getByTestId('sendButton').click();
+    await page.getByTestId("sendButton").click();
 
-    expect(await socket.waitForPush('new_media_message')).toMatchObject({ type: 'document' });
+    expect(await socket.waitForPush("new_media_message")).toMatchObject({
+      type: "document",
+    });
   });
 
-  test('whatever is in the composer rides along as the caption', async ({ page }) => {
+  test("whatever is in the composer rides along as the caption", async ({
+    page,
+  }) => {
     const socket = await openChat(page);
     stubUploadUrl(page);
     stubStoragePut(page);
 
     await attach(page, PNG_FIXTURE);
     // The placeholder changes to say so, which is the only cue that the field means something else now.
-    await expect(page.getByTestId('composerInput')).toHaveAttribute('placeholder', 'Add a caption');
-    await page.getByTestId('composerInput').fill('Here is the form');
-    await page.getByTestId('sendButton').click();
+    await expect(page.getByTestId("composerInput")).toHaveAttribute(
+      "placeholder",
+      "Add a caption",
+    );
+    await page.getByTestId("composerInput").fill("Here is the form");
+    await page.getByTestId("sendButton").click();
 
-    expect(await socket.waitForPush('new_media_message')).toMatchObject({ caption: 'Here is the form' });
+    expect(await socket.waitForPush("new_media_message")).toMatchObject({
+      caption: "Here is the form",
+    });
   });
 
-  test('an attachment can be dropped before it is sent', async ({ page }) => {
+  test("an attachment can be dropped before it is sent", async ({ page }) => {
     await openChat(page);
 
     await attach(page, PNG_FIXTURE);
-    await page.getByTestId('removeAttachmentButton').click();
+    await page.getByTestId("removeAttachmentButton").click();
 
-    await expect(page.getByTestId('pendingAttachment')).toHaveCount(0);
-    await expect(page.getByTestId('composerInput')).toHaveAttribute('placeholder', 'Type a message');
+    await expect(page.getByTestId("pendingAttachment")).toHaveCount(0);
+    await expect(page.getByTestId("composerInput")).toHaveAttribute(
+      "placeholder",
+      "Type a message",
+    );
   });
 });
 
-test.describe('when an attachment fails', () => {
+test.describe("when an attachment fails", () => {
   // A bubble for a file that never arrived would tell the user they had said something they had not.
-  test('nothing is added to the conversation', async ({ page }) => {
+  test("nothing is added to the conversation", async ({ page }) => {
     await openChat(page);
-    await stubUploadUrlError(page, 'signing_failed', 500);
+    await stubUploadUrlError(page, "signing_failed", 500);
 
     await attach(page, PNG_FIXTURE);
-    await page.getByTestId('sendButton').click();
+    await page.getByTestId("sendButton").click();
 
-    await expect(page.getByTestId('composerError')).toBeVisible();
-    await expect(page.getByTestId('webChannelMessage')).toHaveCount(0);
-    await expect(page.getByTestId('mediaContent')).toHaveCount(0);
+    await expect(page.getByTestId("composerError")).toBeVisible();
+    await expect(page.getByTestId("webChannelMessage")).toHaveCount(0);
+    await expect(page.getByTestId("mediaContent")).toHaveCount(0);
   });
 
-  test('the file stays attached, so a retry is one tap and not a re-pick', async ({ page }) => {
+  test("the file stays attached, so a retry is one tap and not a re-pick", async ({
+    page,
+  }) => {
     await openChat(page);
-    await stubUploadUrlError(page, 'signing_failed', 500);
+    await stubUploadUrlError(page, "signing_failed", 500);
 
     await attach(page, PNG_FIXTURE);
-    await page.getByTestId('sendButton').click();
-    await expect(page.getByTestId('composerError')).toBeVisible();
+    await page.getByTestId("sendButton").click();
+    await expect(page.getByTestId("composerError")).toBeVisible();
 
-    await expect(page.getByTestId('pendingImagePreview')).toHaveAttribute('alt', PNG_FIXTURE.name);
-    await expect(page.getByTestId('sendButton')).toHaveAttribute('aria-label', 'retry sending');
+    await expect(page.getByTestId("pendingImagePreview")).toHaveAttribute(
+      "alt",
+      PNG_FIXTURE.name,
+    );
+    await expect(page.getByTestId("sendButton")).toHaveAttribute(
+      "aria-label",
+      "retry sending",
+    );
 
     const signing = stubUploadUrl(page);
     stubStoragePut(page);
-    await page.getByTestId('sendButton').click();
+    await page.getByTestId("sendButton").click();
 
-    await expect(page.getByTestId('mediaContent')).toBeVisible();
+    await expect(page.getByTestId("mediaContent")).toBeVisible();
     expect(signing.count).toBe(1);
   });
 
   // Keyed on the server's code rather than its prose, so this is the widget's own copy.
-  test("the server's reason reaches the user in the widget's words", async ({ page }) => {
+  test("the server's reason reaches the user in the widget's words", async ({
+    page,
+  }) => {
     await openChat(page);
-    await stubUploadUrlError(page, 'file_too_large');
+    await stubUploadUrlError(page, "file_too_large");
 
     await attach(page, PNG_FIXTURE);
-    await page.getByTestId('sendButton').click();
+    await page.getByTestId("sendButton").click();
 
-    await expect(page.getByTestId('composerError')).toHaveText(
-      'That file is too large to send. Please choose a smaller one.',
+    await expect(page.getByTestId("composerError")).toHaveText(
+      "That file is too large to send. Please choose a smaller one.",
     );
   });
 
-  test('a rejection from Google is reported without leaking its XML', async ({ page }) => {
+  test("a rejection from Google is reported without leaking its XML", async ({
+    page,
+  }) => {
     await openChat(page);
     stubUploadUrl(page);
     await stubStoragePutFailure(page);
 
     await attach(page, PNG_FIXTURE);
-    await page.getByTestId('sendButton').click();
+    await page.getByTestId("sendButton").click();
 
-    await expect(page.getByTestId('composerError')).toHaveText('Upload failed. Please try again.');
+    await expect(page.getByTestId("composerError")).toHaveText(
+      "Upload failed. Please try again.",
+    );
   });
 
   // The bytes are already stored; re-uploading them would spend the user's data twice.
-  test('a retry after the channel refused it does not upload the bytes again', async ({ page }) => {
-    const socket = await openChat(page, { failOn: ['new_media_message'] });
+  test("a retry after the channel refused it does not upload the bytes again", async ({
+    page,
+  }) => {
+    const socket = await openChat(page, { failOn: ["new_media_message"] });
     const signing = stubUploadUrl(page);
     const storage = stubStoragePut(page);
 
     await attach(page, PNG_FIXTURE);
-    await page.getByTestId('sendButton').click();
-    await expect(page.getByTestId('composerError')).toBeVisible();
+    await page.getByTestId("sendButton").click();
+    await expect(page.getByTestId("composerError")).toBeVisible();
 
-    socket.recover('new_media_message');
-    await page.getByTestId('sendButton').click();
+    socket.recover("new_media_message");
+    await page.getByTestId("sendButton").click();
 
-    await expect(page.getByTestId('mediaContent')).toBeVisible();
-    expect(socket.payloadsFor('new_media_message')).toHaveLength(2);
+    await expect(page.getByTestId("mediaContent")).toBeVisible();
+    expect(socket.payloadsFor("new_media_message")).toHaveLength(2);
     expect(signing.count).toBe(1);
     expect(storage.count).toBe(1);
   });
 });
 
-test.describe('the organisation details', () => {
+test.describe("the organisation details", () => {
   // Reaching them should not require finding the menu first: the name and mark in the header are
   // the obvious thing to press, and on WhatsApp they are what opens contact info.
-  test('the header opens them, and closing comes back to the chat', async ({ page }) => {
+  test("the header opens them, and closing comes back to the chat", async ({
+    page,
+  }) => {
     await openChat(page);
 
-    await page.getByTestId('orgDetailsButton').click();
+    await page.getByTestId("orgDetailsButton").click();
 
-    await expect(page.getByTestId('webChannelAbout')).toBeVisible();
-    await expect(page.getByTestId('about-address')).toContainText(DARK_ACCENT_ORG.about.address!);
+    await expect(page.getByTestId("webChannelAbout")).toBeVisible();
+    await expect(page.getByTestId("about-address")).toContainText(
+      DARK_ACCENT_ORG.about.address!,
+    );
 
-    await page.getByTestId('aboutBack').click();
+    await page.getByTestId("aboutBack").click();
 
-    await expect(page.getByTestId('webChannelChat')).toBeVisible();
+    await expect(page.getByTestId("webChannelChat")).toBeVisible();
     // Whichever way they were opened, closing lands on the chat with nothing over it.
-    await expect(page.getByTestId('chatMenu')).toHaveCount(0);
+    await expect(page.getByTestId("chatMenu")).toHaveCount(0);
   });
 
-  test('the menu opens them too, and leaves nothing behind on the way back', async ({ page }) => {
+  test("the menu opens them too, and leaves nothing behind on the way back", async ({
+    page,
+  }) => {
     await openChat(page);
 
-    await page.getByTestId('chatMenuButton').click();
-    await page.getByTestId('menuAbout').click();
-    await expect(page.getByTestId('webChannelAbout')).toBeVisible();
+    await page.getByTestId("chatMenuButton").click();
+    await page.getByTestId("menuAbout").click();
+    await expect(page.getByTestId("webChannelAbout")).toBeVisible();
 
-    await page.getByTestId('aboutBack').click();
+    await page.getByTestId("aboutBack").click();
 
-    await expect(page.getByTestId('webChannelChat')).toBeVisible();
-    await expect(page.getByTestId('chatMenu')).toHaveCount(0);
+    await expect(page.getByTestId("webChannelChat")).toBeVisible();
+    await expect(page.getByTestId("chatMenu")).toHaveCount(0);
   });
 });
 
-test.describe('sharing a location', () => {
-  test.use({ geolocation: { latitude: 12.9716, longitude: 77.5946 }, permissions: ['geolocation'] });
+test.describe("sharing a location", () => {
+  test.use({
+    geolocation: { latitude: 12.9716, longitude: 77.5946 },
+    permissions: ["geolocation"],
+  });
 
-  test('the coordinates go to the server and a map link appears', async ({ page }) => {
+  test("the coordinates go to the server and a map link appears", async ({
+    page,
+  }) => {
     const socket = await openChat(page);
 
-    await page.getByTestId('attachButton').click();
-    await page.getByTestId('attach-location').click();
+    await page.getByTestId("attachButton").click();
+    await page.getByTestId("attach-location").click();
 
-    expect(await socket.waitForPush('new_location_message')).toEqual({
+    expect(await socket.waitForPush("new_location_message")).toEqual({
       latitude: 12.9716,
       longitude: 77.5946,
     });
-    await expect(page.getByTestId('locationContent')).toHaveAttribute(
-      'href',
-      'https://www.google.com/maps?q=12.9716,77.5946',
+    await expect(page.getByTestId("locationContent")).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps?q=12.9716,77.5946",
     );
   });
 });
 
-test.describe('when location is refused', () => {
+test.describe("when location is refused", () => {
   test.use({ permissions: [] });
 
-  test('the refusal is explained and nothing is sent', async ({ page }) => {
+  test("the refusal is explained and nothing is sent", async ({ page }) => {
     const socket = await openChat(page);
 
-    await page.getByTestId('attachButton').click();
-    await page.getByTestId('attach-location').click();
+    await page.getByTestId("attachButton").click();
+    await page.getByTestId("attach-location").click();
 
-    await expect(page.getByTestId('composerError')).toBeVisible();
-    expect(socket.payloadsFor('new_location_message')).toHaveLength(0);
+    await expect(page.getByTestId("composerError")).toBeVisible();
+    expect(socket.payloadsFor("new_location_message")).toHaveLength(0);
   });
 });

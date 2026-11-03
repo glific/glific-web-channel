@@ -4,7 +4,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { clearWebChannelSession } from '@/services/webChannelAuth';
 import { uploadMedia } from '@/services/webChannelMedia';
-import { pushNewMediaMessage, pushNewLocationMessage } from '@/services/webChannelSocket';
+import { pushNewMediaMessage, pushNewLocationMessage, pushNewMessage } from '@/services/webChannelSocket';
+import { hasTriggeredKeyword, markKeywordTriggered } from '@/lib/triggerKeywords';
 import { Chat } from './Chat';
 import { About } from './About';
 
@@ -67,6 +68,7 @@ vi.mock('@/hooks/useAudioRecorder', () => ({
 const mockedUpload = uploadMedia as unknown as ReturnType<typeof vi.fn>;
 const mockedMediaPush = pushNewMediaMessage as unknown as ReturnType<typeof vi.fn>;
 const mockedLocationPush = pushNewLocationMessage as unknown as ReturnType<typeof vi.fn>;
+const mockedNewMessage = pushNewMessage as unknown as ReturnType<typeof vi.fn>;
 
 const hosted = { url: 'https://cdn.test/cat.png', content_type: 'image/png' };
 const file = new File(['bytes'], 'cat.png', { type: 'image/png' });
@@ -449,5 +451,63 @@ describe('the chat header and menu', () => {
     fireEvent.click(screen.getByTestId('menuLogout'));
 
     expect(clearWebChannelSession).toHaveBeenCalled();
+  });
+});
+
+describe('<Chat /> opened from a link', () => {
+  const linkWith = (keywords: object) =>
+    sessionStorage.setItem('glific_web_auto_trigger_keywords', JSON.stringify(keywords));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it('puts ?text= in the composer, and sends nothing', async () => {
+    linkWith({ text: 'I want to volunteer' });
+    await renderChat();
+
+    await waitFor(() => expect(screen.getByTestId('composerInput')).toHaveValue('I want to volunteer'));
+    expect(mockedNewMessage).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('webChannelMessage')).not.toBeInTheDocument();
+  });
+
+  // Sent like a typed message, so the server matches it against web flows' keywords.
+  it('sends ?start= as the contact\'s message, shows it, and records it', async () => {
+    linkWith({ start: 'adopt' });
+    await renderChat();
+
+    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalledWith({ id: 'ch' }, 'adopt'));
+    expect(await screen.findByTestId('content')).toHaveTextContent('adopt');
+    expect(hasTriggeredKeyword(1, 'adopt')).toBe(true);
+  });
+
+  it('does not send a keyword a link already sent for this contact', async () => {
+    markKeywordTriggered(1, 'adopt');
+    linkWith({ start: 'adopt' });
+    await renderChat();
+
+    await screen.findByTestId('composerInput');
+    expect(mockedNewMessage).not.toHaveBeenCalled();
+  });
+
+  // Refused (rate limited, blocked) or never answered: the next visit may succeed.
+  it('shows nothing and leaves the keyword unrecorded when the send fails, so it is tried again', async () => {
+    mockedNewMessage.mockRejectedValueOnce({ reason: 'rate_limited' });
+    linkWith({ start: 'adopt' });
+    await renderChat();
+
+    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(hasTriggeredKeyword(1, 'adopt')).toBe(false);
+    expect(screen.queryByTestId('webChannelMessage')).not.toBeInTheDocument();
+  });
+
+  it('does nothing without a link', async () => {
+    await renderChat();
+
+    expect(screen.getByTestId('composerInput')).toHaveValue('');
+    expect(mockedNewMessage).not.toHaveBeenCalled();
   });
 });
