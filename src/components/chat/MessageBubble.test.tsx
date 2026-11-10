@@ -136,7 +136,36 @@ describe('<MessageBubble />', () => {
 
       fireEvent.click(screen.getAllByTestId('interactiveOption')[1]);
 
-      expect(onSelectOption).toHaveBeenCalledWith('Coding');
+      expect(onSelectOption).toHaveBeenCalledWith({ title: 'Coding' });
+    });
+
+    it('hands back the whole list option, description included', () => {
+      const onSelectOption = vi.fn();
+      render(
+        <MessageBubble
+          message={message({ flow: 'outbound', body: 'Choose a subject', interactive_content: list })}
+          onSelectOption={onSelectOption}
+        />
+      );
+
+      fireEvent.click(screen.getAllByTestId('interactiveOption')[0]);
+
+      expect(onSelectOption).toHaveBeenCalledWith({ title: 'Physics', description: 'Mechanics and more' });
+    });
+
+    it('shows the description under the title on the contact\'s list reply', () => {
+      render(
+        <MessageBubble
+          message={message({
+            flow: 'inbound',
+            body: 'Physics',
+            interactive_content: { title: 'Physics', description: 'Mechanics and more' },
+          })}
+        />
+      );
+
+      expect(screen.getByTestId('chosenOption')).toHaveTextContent('Physics');
+      expect(screen.getByTestId('chosenOption')).toHaveTextContent('Mechanics and more');
     });
 
     // The contact's own choice comes back as a plain text message; rendering buttons on it would

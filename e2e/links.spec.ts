@@ -7,7 +7,7 @@ import { mockPhoenix } from './support/socket';
 
 /**
  * Links an organisation shares to its web chat: `?text=` pre-fills the composer, `?start=` sends a
- * keyword as the contact's message, once. The socket and auth are stubbed; what is real is that the link
+ * keyword as the contact's message each time the link is opened. The socket and auth are stubbed; what is real is that the link
  * survives the redirects and the login in between.
  */
 
@@ -46,6 +46,7 @@ test.describe('a ?text= link', () => {
 });
 
 test.describe('a ?start= link', () => {
+  // A reload is the same visit, not the link opened again: the link was consumed on arrival.
   test('starts the flow once the chat opens, and not again on reload', async ({ page }) => {
     await signedIn(page);
     const socket = await mockPhoenix(page);
@@ -80,7 +81,8 @@ test.describe('a ?start= link', () => {
     await expect(page.getByTestId('composerInput')).toHaveValue('');
   });
 
-  test('does not start it again when the same link is opened later', async ({ page }) => {
+  // As typing the keyword again would: the backend restarts the flow on every keyword.
+  test('starts it again every time the same link is opened', async ({ page }) => {
     await signedIn(page);
     const socket = await mockPhoenix(page);
 
@@ -88,24 +90,21 @@ test.describe('a ?start= link', () => {
     await socket.waitForPush('new_message');
 
     await page.goto('/?start=adopt');
-    await expect(page.getByTestId('connectionStatus')).toHaveText('online');
-    await page.waitForTimeout(300);
-    expect(socket.payloadsFor('new_message')).toHaveLength(1);
+    await expect.poll(() => socket.payloadsFor('new_message')).toHaveLength(2);
   });
 
-  // A refused send (rate limited, say) is not recorded, so opening the link again tries again.
-  test('a keyword the server refuses is tried again the next time the link is opened', async ({ page }) => {
+  test('a keyword the server refuses keeps its single tick, and is sent again next time', async ({ page }) => {
     await signedIn(page);
     const socket = await mockPhoenix(page, { failOn: ['new_message'] });
 
     await page.goto('/?start=adopt');
     await socket.waitForPush('new_message');
-    await expect(page.getByTestId('webChannelMessage')).toHaveCount(0);
+    await expect(page.getByTestId('statusPending')).toBeVisible();
 
     socket.recover('new_message');
     await page.goto('/?start=adopt');
 
-    await expect(page.getByTestId('content')).toHaveText('adopt');
+    await expect(page.getByTestId('statusSent')).toBeVisible();
     expect(socket.payloadsFor('new_message')).toHaveLength(2);
   });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Mic, MoreVertical, Plus, Send, Trash2 } from 'lucide-react';
+import { Mic, MoreVertical, Pause, Plus, Send, Square, Trash2 } from 'lucide-react';
 import type { Channel, Socket } from 'phoenix';
 
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { PendingAttachment } from '@/components/chat/PendingAttachment';
 import { ChatMenu } from '@/components/chat/ChatMenu';
 import { Logo } from '@/components/branding/Logo';
 import { getBranding } from '@/services/branding';
+import { cn } from '@/lib/utils';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useLocationShare, type SharedLocation } from '@/hooks/useLocationShare';
 import { useMediaSend } from '@/hooks/useMediaSend';
@@ -21,10 +22,12 @@ import {
   pushLoadMore,
   pushNewMessage,
   type OutboundMedia,
+  type WebChannelInteractiveContent,
+  type WebChannelInteractiveOption,
   type WebChannelMessage,
 } from '@/services/webChannelSocket';
 import { clearWebChannelSession, getWebChannelContact, getWebChannelToken } from '@/services/webChannelAuth';
-import { hasTriggeredKeyword, markKeywordTriggered, takeTriggerKeywords } from '@/lib/triggerKeywords';
+import { takeTriggerKeywords } from '@/lib/triggerKeywords';
 
 const PAGE_SIZE = 100;
 
@@ -68,6 +71,7 @@ export const Chat = () => {
   const [attachOpen, setAttachOpen] = useState(false);
   // track seen ids so an echoed "new_message" push never duplicates an already-rendered message
   const seenIds = useRef<Set<string>>(new Set());
+  const localCount = useRef(0);
 
   // Whether the conversation follows its newest message. True until the contact scrolls up to
   // read history, so a reply, a growing composer or a late-loading image never leaves the newest
@@ -83,9 +87,10 @@ export const Chat = () => {
   // appended on the ack rather than optimistically: a bubble for a file whose upload then failed
   // would claim something was said that was not.
   const appendLocal = useCallback((message: Omit<WebChannelMessage, 'id' | 'flow' | 'inserted_at'>) => {
+    localCount.current += 1;
     const local: WebChannelMessage = {
       ...message,
-      id: `local-${Date.now()}`,
+      id: `local-${localCount.current}`,
       flow: 'inbound',
       inserted_at: new Date().toISOString(),
     };
@@ -93,7 +98,23 @@ export const Chat = () => {
     followNewest.current = true;
     setMessages((prev) => [...prev, local]);
     requestAnimationFrame(scrollToBottom);
+    return local.id;
   }, []);
+
+  // Shown at once with a single tick, which turns double only when the server accepts it. A send
+  // that fails or never reaches the server (the contact is offline) keeps the single tick.
+  const sendText = useCallback(
+    (channel: Channel, body: string, interactive?: WebChannelInteractiveContent) => {
+      const id = appendLocal({ body, type: 'text', status: 'pending', interactive_content: interactive });
+
+      pushNewMessage(channel, body)
+        .then(() =>
+          setMessages((prev) => prev.map((message) => (message.id === id ? { ...message, status: 'sent' } : message)))
+        )
+        .catch(() => {});
+    },
+    [appendLocal]
+  );
 
   const getChannel = useCallback(() => channelRef.current, []);
 
@@ -118,14 +139,24 @@ export const Chat = () => {
   const media = useMediaSend(getChannel, handleMediaSent);
   const location = useLocationShare(getChannel, handleLocationSent);
 
+  // Whether the recording being stopped goes straight out, or waits in the composer to be played
+  // back first.
+  const sendOnStop = useRef(false);
+
   // A finished recording is a file like any other, so it takes the same upload-then-send path —
-  // including the retry bar, if either half fails.
+  // including the retry bar, if either half fails. Held for review, it is a pending attachment the
+  // contact can play, remove or send.
   const recorder = useAudioRecorder((file: File) => {
     media.attach(file);
     // A voice note can carry a caption like any other attachment: whatever is in the composer
     // when the recording ends is about to be cleared by the send either way.
-    void media.send(draft);
+    if (sendOnStop.current) void media.send(draft);
   });
+
+  const stopRecording = (send: boolean) => {
+    sendOnStop.current = send;
+    recorder.stop();
+  };
 
   const busy = media.status === 'uploading' || media.status === 'sending';
   const hasContent = !!media.pending || !!draft.trim();
@@ -179,24 +210,14 @@ export const Chat = () => {
   }, []);
 
   // A link's keywords, once the chat has joined (see lib/triggerKeywords). `text` is only ever
-  // pre-filled; `start` is sent as the contact's message, once per contact.
+  // pre-filled; `start` is sent as the contact's message.
   const applyTriggerKeywords = (channel: Channel) => {
     const link = takeTriggerKeywords();
     if (!link) return;
 
     if (link.text) setDraft((current) => current || (link.text as string));
 
-    const keyword = link.start;
-    if (!keyword || !contact || hasTriggeredKeyword(contact.contactId, keyword)) return;
-
-    pushNewMessage(channel, keyword)
-      .then(() => {
-        markKeywordTriggered(contact.contactId, keyword);
-        appendLocal({ body: keyword, type: 'text' });
-      })
-      .catch(() => {
-        // Left unrecorded, so opening the link again tries again.
-      });
+    if (link.start) sendText(channel, link.start);
   };
 
   // open socket + join channel on mount
@@ -279,11 +300,11 @@ export const Chat = () => {
 
   // An interactive option is answered as ordinary text, the way WhatsApp records one, so nothing
   // downstream — the message row, the staff inbox, a future flow — has to know it came from a tap.
-  const handleSelectOption = (title: string) => {
-    if (!channelRef.current) return;
+  // The option travels with the local bubble only, so a list reply shows its description too.
+  const handleSelectOption = (option: WebChannelInteractiveOption) => {
+    if (!channelRef.current || !option.title) return;
 
-    appendLocal({ body: title, type: 'text' });
-    pushNewMessage(channelRef.current, title).catch(() => {});
+    sendText(channelRef.current, option.title, { title: option.title, description: option.description });
   };
 
   const handleSend = () => {
@@ -296,15 +317,8 @@ export const Chat = () => {
     const body = draft.trim();
     if (!body || !channelRef.current) return;
 
-    // optimistic append: show the user's own message instantly.
-    // Assumption: the server does NOT echo the contact's own inbound message back over "new_message"
-    // (that push is used for outbound/flow replies). The id-based dedupe above is a safety net if it does.
-    appendLocal({ body, type: 'text' });
     setDraft('');
-
-    pushNewMessage(channelRef.current, body).catch(() => {
-      // keep the optimistic bubble; the phoenix client auto-reconnects and the message is queued
-    });
+    sendText(channelRef.current, body);
   };
 
   const handleLogout = () => {
@@ -389,12 +403,6 @@ export const Chat = () => {
 
         {recorder.isRecording ? (
           <div className="flex items-center gap-2" data-testid="recordingBar">
-            <span className="size-2.5 animate-pulse rounded-full bg-destructive" />
-            <span className="text-sm tabular-nums" data-testid="recordingTimer">
-              {formatDuration(recorder.seconds)}
-            </span>
-            <span className="text-sm text-muted-foreground">Recording…</span>
-            <div className="flex-1" />
             <Button
               variant="ghost"
               size="icon"
@@ -404,7 +412,51 @@ export const Chat = () => {
             >
               <Trash2 />
             </Button>
-            <Button size="icon" aria-label="send recording" data-testid="sendRecordingButton" onClick={recorder.stop}>
+            <span
+              className={cn('size-2.5 rounded-full bg-destructive', !recorder.isPaused && 'animate-pulse')}
+              aria-hidden="true"
+            />
+            <span className="text-sm tabular-nums" data-testid="recordingTimer">
+              {formatDuration(recorder.seconds)}
+            </span>
+            <span className="text-sm text-muted-foreground">{recorder.isPaused ? 'Paused' : 'Recording…'}</span>
+            <div className="flex-1" />
+            {recorder.isPaused ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="resume recording"
+                data-testid="resumeRecordingButton"
+                onClick={recorder.resume}
+              >
+                <Mic />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="pause recording"
+                data-testid="pauseRecordingButton"
+                onClick={recorder.pause}
+              >
+                <Pause />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="stop and review recording"
+              data-testid="reviewRecordingButton"
+              onClick={() => stopRecording(false)}
+            >
+              <Square />
+            </Button>
+            <Button
+              size="icon"
+              aria-label="send recording"
+              data-testid="sendRecordingButton"
+              onClick={() => stopRecording(true)}
+            >
               <Send />
             </Button>
           </div>

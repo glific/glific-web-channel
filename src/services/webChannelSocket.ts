@@ -18,6 +18,8 @@ export interface WebChannelInteractiveOption {
 export interface WebChannelInteractiveContent {
   type?: 'quick_reply' | 'list' | string;
   title?: string;
+  // On the contact's own reply: the description of the list option they chose.
+  description?: string;
   body?: string;
   content?: { text?: string; header?: string };
   options?: WebChannelInteractiveOption[];
@@ -34,6 +36,9 @@ export interface WebChannelMessage {
   inserted_at: string;
   media?: WebChannelMedia | null;
   interactive_content?: WebChannelInteractiveContent | null;
+  // Only on the contact's own messages sent from this page: `pending` until the server accepts it.
+  // Anything the server returned is already stored, so it carries none and reads as sent.
+  status?: 'pending' | 'sent';
 }
 
 // The media types the server accepts on "new_media_message"

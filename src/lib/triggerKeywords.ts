@@ -1,10 +1,11 @@
 // Links an organisation shares to its web chat can carry a message, the way wa.me links do:
 //
 //   ?text=Hello   opens the chat with "Hello" in the composer, for the contact to send
-//   ?start=adopt  sends "adopt" for the contact once the chat opens, so its flow starts
+//   ?start=adopt  sends "adopt" for the contact when the chat opens, so its flow starts
 //
-// `text` is only ever pre-filled; `start` is sent as the contact's message, once. A keyword only
-// starts a flow if it is a web flow's: the server matches keywords on the message's channel.
+// `text` is only ever pre-filled; `start` is sent as the contact's message on every visit through
+// the link, the way typing the keyword again restarts its flow. A keyword only starts a flow if it
+// is a web flow's: the server matches keywords on the message's channel.
 
 export interface TriggerKeywords {
   text?: string;
@@ -15,8 +16,6 @@ export interface TriggerKeywords {
 // for an organisation's own login, possibly another site) before reaching the chat, and the tab
 // is the one thing that survives all of it.
 const AUTO_TRIGGER_KEYWORDS = 'glific_web_auto_trigger_keywords';
-// localStorage, so a keyword a link sent is not sent again on a reload or a later visit.
-const TRIGGERED_KEYWORDS = 'glific_web_triggered_keywords';
 
 // The server refuses a message body over this length.
 export const MAX_TEXT_LENGTH = 4096;
@@ -61,24 +60,4 @@ export const takeTriggerKeywords = (): TriggerKeywords | null => {
   } catch {
     return null;
   }
-};
-
-const triggeredKeywords = (): Record<string, string[]> => {
-  try {
-    return JSON.parse(localStorage.getItem(TRIGGERED_KEYWORDS) ?? '{}');
-  } catch {
-    return {};
-  }
-};
-
-/** Whether a link already sent this keyword for this contact. */
-export const hasTriggeredKeyword = (contactId: string | number, keyword: string): boolean =>
-  triggeredKeywords()[String(contactId)]?.includes(keyword) ?? false;
-
-export const markKeywordTriggered = (contactId: string | number, keyword: string): void => {
-  const started = triggeredKeywords();
-  const forContact = started[String(contactId)] ?? [];
-  if (forContact.includes(keyword)) return;
-
-  localStorage.setItem(TRIGGERED_KEYWORDS, JSON.stringify({ ...started, [String(contactId)]: [...forContact, keyword] }));
 };

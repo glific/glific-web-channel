@@ -1,11 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { clearWebChannelSession } from '@/services/webChannelAuth';
 import { uploadMedia } from '@/services/webChannelMedia';
 import { pushNewMediaMessage, pushNewLocationMessage, pushNewMessage } from '@/services/webChannelSocket';
-import { hasTriggeredKeyword, markKeywordTriggered } from '@/lib/triggerKeywords';
 import { Chat } from './Chat';
 import { About } from './About';
 
@@ -49,10 +48,13 @@ const { recorderMock } = vi.hoisted(() => ({
   recorderMock: {
     isSupported: true,
     isRecording: false,
+    isPaused: false,
     seconds: 0,
     error: null as string | null,
     start: vi.fn(),
     stop: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
     cancel: vi.fn(),
     finish: (_file: File) => {},
   },
@@ -77,13 +79,24 @@ const uploadRejects = (code: string, status: number) =>
   mockedUpload.mockRejectedValueOnce({ response: { status, data: { error: { status, code } } } });
 
 const renderChat = async () => {
-  render(
+  const rendered = render(
     <MemoryRouter>
       <Chat />
     </MemoryRouter>
   );
   // the composer is live only once the channel has joined
   await screen.findByTestId('composerInput');
+  return rendered;
+};
+
+// While recording, the bar replaces the composer.
+const renderChatWithoutComposer = async () => {
+  render(
+    <MemoryRouter>
+      <Chat />
+    </MemoryRouter>
+  );
+  await screen.findByTestId('recordingBar');
 };
 
 const pickFile = (picked = file) =>
@@ -98,6 +111,7 @@ describe('<Chat /> media, voice and location composers', () => {
     URL.createObjectURL = vi.fn(() => 'blob:preview');
     URL.revokeObjectURL = vi.fn();
     recorderMock.isRecording = false;
+    recorderMock.isPaused = false;
     recorderMock.seconds = 0;
     recorderMock.error = null;
     Object.defineProperty(navigator, 'geolocation', {
@@ -189,6 +203,13 @@ describe('<Chat /> media, voice and location composers', () => {
     await renderChat();
     fireEvent.click(screen.getByTestId('recordButton'));
     expect(recorderMock.start).toHaveBeenCalled();
+    cleanup();
+
+    recorderMock.isRecording = true;
+    await renderChatWithoutComposer();
+    fireEvent.click(screen.getByTestId('sendRecordingButton'));
+    expect(recorderMock.stop).toHaveBeenCalled();
+    recorderMock.isRecording = false;
 
     const recording = new File(['audio'], 'recording-1.webm', { type: 'audio/webm' });
     mockedUpload.mockResolvedValueOnce({ url: 'https://cdn.test/voice.webm', content_type: 'audio/webm' });
@@ -207,6 +228,10 @@ describe('<Chat /> media, voice and location composers', () => {
     await renderChat();
 
     fireEvent.change(screen.getByTestId('composerInput'), { target: { value: 'listen to this' } });
+    recorderMock.isRecording = true;
+    fireEvent.change(screen.getByTestId('composerInput'), { target: { value: 'listen to this!' } });
+    fireEvent.click(await screen.findByTestId('sendRecordingButton'));
+    recorderMock.isRecording = false;
     const recording = new File(['audio'], 'recording-1.webm', { type: 'audio/webm' });
     mockedUpload.mockResolvedValueOnce({ url: 'https://cdn.test/voice.webm', content_type: 'audio/webm' });
     await act(async () => recorderMock.finish(recording));
@@ -214,7 +239,7 @@ describe('<Chat /> media, voice and location composers', () => {
     await waitFor(() =>
       expect(mockedMediaPush).toHaveBeenCalledWith(
         { id: 'ch' },
-        expect.objectContaining({ type: 'audio', caption: 'listen to this' })
+        expect.objectContaining({ type: 'audio', caption: 'listen to this!' })
       )
     );
     expect(screen.getByTestId('composerInput')).toHaveValue('');
@@ -237,8 +262,54 @@ describe('<Chat /> media, voice and location composers', () => {
     fireEvent.click(screen.getByTestId('sendRecordingButton'));
     expect(recorderMock.stop).toHaveBeenCalled();
 
+    fireEvent.click(screen.getByTestId('pauseRecordingButton'));
+    expect(recorderMock.pause).toHaveBeenCalled();
+
     fireEvent.click(screen.getByTestId('cancelRecordingButton'));
     expect(recorderMock.cancel).toHaveBeenCalled();
+  });
+
+  it('offers resume, not pause, while a recording is paused', async () => {
+    recorderMock.isRecording = true;
+    recorderMock.isPaused = true;
+    await renderChatWithoutComposer();
+
+    expect(screen.getByTestId('recordingBar')).toHaveTextContent('Paused');
+    expect(screen.queryByTestId('pauseRecordingButton')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('resumeRecordingButton'));
+    expect(recorderMock.resume).toHaveBeenCalled();
+  });
+
+  // Stopped rather than sent: the note waits in the composer to be played back, then sent or removed.
+  it('holds a stopped recording for review, and sends it only on Send', async () => {
+    recorderMock.isRecording = true;
+    await renderChatWithoutComposer();
+
+    fireEvent.click(screen.getByTestId('reviewRecordingButton'));
+    expect(recorderMock.stop).toHaveBeenCalled();
+
+    recorderMock.isRecording = false;
+    const recording = new File(['audio'], 'recording-1.webm', { type: 'audio/webm' });
+    await act(async () => recorderMock.finish(recording));
+
+    expect(await screen.findByTestId('pendingAudioPreview')).toHaveAttribute('src', 'blob:preview');
+    expect(mockedUpload).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('sendButton'));
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalledWith(recording, 'audio'));
+  });
+
+  it('deletes a recording held for review without sending it', async () => {
+    recorderMock.isRecording = true;
+    await renderChatWithoutComposer();
+    fireEvent.click(screen.getByTestId('reviewRecordingButton'));
+    recorderMock.isRecording = false;
+    await act(async () => recorderMock.finish(new File(['audio'], 'r.webm', { type: 'audio/webm' })));
+
+    fireEvent.click(await screen.findByTestId('removeAttachmentButton'));
+
+    expect(screen.queryByTestId('pendingAttachment')).not.toBeInTheDocument();
+    expect(mockedUpload).not.toHaveBeenCalled();
   });
 
   it('hides the mic where the browser cannot record, rather than offering a dead button', async () => {
@@ -375,6 +446,33 @@ describe('<Chat /> media, voice and location composers', () => {
     expect(await screen.findByText('hello')).toBeInTheDocument();
     expect(mockedUpload).not.toHaveBeenCalled();
   });
+
+  it('shows a single tick until the server accepts a message, then a double tick', async () => {
+    let accept: (value: unknown) => void = () => {};
+    mockedNewMessage.mockReturnValueOnce(new Promise((resolve) => (accept = resolve)));
+    await renderChat();
+
+    fireEvent.change(screen.getByTestId('composerInput'), { target: { value: 'hello' } });
+    fireEvent.click(screen.getByTestId('sendButton'));
+
+    expect(await screen.findByTestId('statusPending')).toBeInTheDocument();
+    await act(async () => accept({}));
+    expect(await screen.findByTestId('statusSent')).toBeInTheDocument();
+    expect(screen.queryByTestId('statusPending')).not.toBeInTheDocument();
+  });
+
+  // Offline, the push is never answered: the message must not claim it was sent.
+  it('keeps the single tick when the send fails', async () => {
+    mockedNewMessage.mockRejectedValueOnce(new Error('new_message timeout'));
+    await renderChat();
+
+    fireEvent.change(screen.getByTestId('composerInput'), { target: { value: 'hello' } });
+    fireEvent.click(screen.getByTestId('sendButton'));
+
+    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByTestId('statusPending')).toBeInTheDocument();
+  });
 });
 
 // The navigation cases need somewhere to navigate to; the rest of this suite renders Chat alone.
@@ -474,34 +572,26 @@ describe('<Chat /> opened from a link', () => {
   });
 
   // Sent like a typed message, so the server matches it against web flows' keywords.
-  it('sends ?start= as the contact\'s message, shows it, and records it', async () => {
+  it('sends ?start= as the contact\'s message, and shows it', async () => {
     linkWith({ start: 'adopt' });
     await renderChat();
 
     await waitFor(() => expect(mockedNewMessage).toHaveBeenCalledWith({ id: 'ch' }, 'adopt'));
     expect(await screen.findByTestId('content')).toHaveTextContent('adopt');
-    expect(hasTriggeredKeyword(1, 'adopt')).toBe(true);
   });
 
-  it('does not send a keyword a link already sent for this contact', async () => {
-    markKeywordTriggered(1, 'adopt');
+  // Typing a keyword again restarts its flow; opening its link again does the same.
+  it('sends the keyword again every time the link is opened', async () => {
+    linkWith({ start: 'adopt' });
+    const first = await renderChat();
+    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalledTimes(1));
+    first.unmount();
+
     linkWith({ start: 'adopt' });
     await renderChat();
 
-    await screen.findByTestId('composerInput');
-    expect(mockedNewMessage).not.toHaveBeenCalled();
-  });
-
-  // Refused (rate limited, blocked) or never answered: the next visit may succeed.
-  it('shows nothing and leaves the keyword unrecorded when the send fails, so it is tried again', async () => {
-    mockedNewMessage.mockRejectedValueOnce({ reason: 'rate_limited' });
-    linkWith({ start: 'adopt' });
-    await renderChat();
-
-    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalled());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(hasTriggeredKeyword(1, 'adopt')).toBe(false);
-    expect(screen.queryByTestId('webChannelMessage')).not.toBeInTheDocument();
+    await waitFor(() => expect(mockedNewMessage).toHaveBeenCalledTimes(2));
+    expect(mockedNewMessage).toHaveBeenLastCalledWith({ id: 'ch' }, 'adopt');
   });
 
   it('does nothing without a link', async () => {
