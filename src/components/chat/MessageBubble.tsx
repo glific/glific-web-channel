@@ -1,4 +1,4 @@
-import { Download, FileText, MapPin } from 'lucide-react';
+import { Check, CheckCheck, Download, FileText, MapPin } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { formatShortTime, whatsappToJsx } from '@/lib/whatsapp';
@@ -12,7 +12,7 @@ export interface MessageBubbleProps {
   message: WebChannelMessage;
   // Tapping an option answers with its title, which is exactly what WhatsApp records for an
   // interactive reply — so the conversation reads the same on either channel.
-  onSelectOption?: (title: string) => void;
+  onSelectOption?: (option: WebChannelInteractiveOption) => void;
 }
 
 const MEDIA_TYPES = ['image', 'audio', 'video', 'document'];
@@ -67,7 +67,7 @@ const InteractiveContent = ({
 }: {
   content: WebChannelInteractiveContent;
   body: string;
-  onSelectOption?: (title: string) => void;
+  onSelectOption?: (option: WebChannelInteractiveOption) => void;
 }) => {
   const options = interactiveOptions(content).filter((option) => !!option.title);
   const text = content.content?.text ?? content.body ?? body;
@@ -87,7 +87,7 @@ const InteractiveContent = ({
               type="button"
               data-testid="interactiveOption"
               disabled={!onSelectOption}
-              onClick={() => onSelectOption?.(option.title as string)}
+              onClick={() => onSelectOption?.(option)}
               className="rounded-full border-2 border-primary px-4 py-2 text-left text-sm font-semibold hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="block">{option.title}</span>
@@ -102,6 +102,23 @@ const InteractiveContent = ({
   );
 };
 
+// The contact's choice from a list, shown the way WhatsApp shows one: the title, and under it the
+// option's description.
+const ChosenOption = ({ title, description }: { title: string; description: string }) => (
+  <div className="flex flex-col" data-testid="chosenOption">
+    <span>{title}</span>
+    <span className="text-xs text-muted-foreground">{description}</span>
+  </div>
+);
+
+// No blue read tick: the widget cannot tell when an organisation has read a message.
+const StatusTicks = ({ status }: { status?: WebChannelMessage['status'] }) =>
+  status === 'pending' ? (
+    <Check className="size-3.5" aria-label="sending" data-testid="statusPending" />
+  ) : (
+    <CheckCheck className="size-3.5" aria-label="sent" data-testid="statusSent" />
+  );
+
 // A lean single-conversation bubble in the WhatsApp visual style. Self-contained
 // (no staff ChatMessage coupling: no templates/managed-phone logic).
 export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) => {
@@ -113,6 +130,7 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
   // Only an inbound-to-the-browser interactive message is answerable; the contact's own echoed
   // choice is just text.
   const interactive = !isSent && message.interactive_content?.type ? message.interactive_content : null;
+  const chosenDescription = isSent ? message.interactive_content?.description : undefined;
 
   return (
     <div
@@ -134,12 +152,15 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
             <MediaContent type={message.type as string} url={mediaUrl as string} caption={message.body} />
           ) : isLocation ? (
             <LocationContent url={message.body} />
+          ) : chosenDescription ? (
+            <ChosenOption title={message.body} description={chosenDescription} />
           ) : (
             whatsappToJsx(message.body)
           )}
         </div>
-        <span className="mt-1 block text-right text-[0.65rem] text-muted-foreground tabular-nums" data-testid="date">
-          {formatShortTime(message.inserted_at)}
+        <span className="mt-1 flex items-center justify-end gap-1 text-[0.65rem] text-muted-foreground tabular-nums">
+          <span data-testid="date">{formatShortTime(message.inserted_at)}</span>
+          {isSent && <StatusTicks status={message.status} />}
         </span>
       </div>
     </div>
