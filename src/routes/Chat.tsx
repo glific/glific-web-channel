@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Mic, MoreVertical, Pause, Plus, Send, Square, Trash2 } from 'lucide-react';
 import type { Channel, Socket } from 'phoenix';
@@ -22,11 +22,11 @@ import {
   pushLoadMore,
   pushNewMessage,
   type OutboundMedia,
-  type WebChannelInteractiveContent,
   type WebChannelInteractiveOption,
   type WebChannelMessage,
 } from '@/services/webChannelSocket';
 import { clearWebChannelSession, getWebChannelContact, getWebChannelToken } from '@/services/webChannelAuth';
+import { withChosenDescriptions } from '@/lib/listReplies';
 import { takeTriggerKeywords } from '@/lib/triggerKeywords';
 
 const PAGE_SIZE = 100;
@@ -57,6 +57,7 @@ export const Chat = () => {
   const branding = getBranding();
 
   const [messages, setMessages] = useState<WebChannelMessage[]>([]);
+  const displayed = useMemo(() => withChosenDescriptions(messages), [messages]);
   const [draft, setDraft] = useState('');
   const [connectionState, setConnectionState] = useState<'connecting' | 'open' | 'reconnecting'>('connecting');
   const [loadingMore, setLoadingMore] = useState(false);
@@ -104,8 +105,8 @@ export const Chat = () => {
   // Shown at once with a single tick, which turns double only when the server accepts it. A send
   // that fails or never reaches the server (the contact is offline) keeps the single tick.
   const sendText = useCallback(
-    (channel: Channel, body: string, interactive?: WebChannelInteractiveContent) => {
-      const id = appendLocal({ body, type: 'text', status: 'pending', interactive_content: interactive });
+    (channel: Channel, body: string) => {
+      const id = appendLocal({ body, type: 'text', status: 'pending' });
 
       pushNewMessage(channel, body)
         .then(() =>
@@ -300,11 +301,11 @@ export const Chat = () => {
 
   // An interactive option is answered as ordinary text, the way WhatsApp records one, so nothing
   // downstream — the message row, the staff inbox, a future flow — has to know it came from a tap.
-  // The option travels with the local bubble only, so a list reply shows its description too.
+  // The bubble finds the option's description from the list itself (see withChosenDescriptions).
   const handleSelectOption = (option: WebChannelInteractiveOption) => {
     if (!channelRef.current || !option.title) return;
 
-    sendText(channelRef.current, option.title, { title: option.title, description: option.description });
+    sendText(channelRef.current, option.title);
   };
 
   const handleSend = () => {
@@ -380,7 +381,7 @@ export const Chat = () => {
         data-testid="messageList"
       >
         {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
-        {messages.map((message) => (
+        {displayed.map((message) => (
           <MessageBubble key={message.id} message={message} onSelectOption={handleSelectOption} />
         ))}
       </div>

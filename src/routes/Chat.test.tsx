@@ -4,7 +4,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { clearWebChannelSession } from '@/services/webChannelAuth';
 import { uploadMedia } from '@/services/webChannelMedia';
-import { pushNewMediaMessage, pushNewLocationMessage, pushNewMessage } from '@/services/webChannelSocket';
+import {
+  connectAndJoin,
+  pushNewMediaMessage,
+  pushNewLocationMessage,
+  pushNewMessage,
+} from '@/services/webChannelSocket';
 import { Chat } from './Chat';
 import { About } from './About';
 
@@ -599,5 +604,61 @@ describe('<Chat /> opened from a link', () => {
 
     expect(screen.getByTestId('composerInput')).toHaveValue('');
     expect(mockedNewMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('<Chat /> list replies', () => {
+  // The server stores a list reply as its bare title; the description has to survive a reload.
+  it('shows the chosen option\'s description on a reply loaded from history', async () => {
+    (connectAndJoin as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      socket: {},
+      channel: { id: 'ch' },
+      messages: [
+        {
+          id: 1,
+          body: 'Pick a subject',
+          flow: 'outbound',
+          inserted_at: '2026-11-16T09:50:00Z',
+          interactive_content: {
+            type: 'list',
+            items: [{ title: 'Subjects', options: [{ title: 'Math', description: 'Algebra and geometry' }] }],
+          },
+        },
+        { id: 2, body: 'Math', type: 'text', flow: 'inbound', inserted_at: '2026-11-16T09:51:00Z', interactive_content: {} },
+      ],
+    });
+
+    await renderChat();
+
+    expect(screen.getByTestId('chosenOption')).toHaveTextContent('Math');
+    expect(screen.getByTestId('chosenOption')).toHaveTextContent('Algebra and geometry');
+  });
+
+  it('sends only the title when an option is tapped, and shows its description', async () => {
+    (connectAndJoin as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      socket: {},
+      channel: { id: 'ch' },
+      messages: [
+        {
+          id: 1,
+          body: 'Pick a subject',
+          flow: 'outbound',
+          inserted_at: '2026-11-16T09:50:00Z',
+          interactive_content: {
+            type: 'list',
+            items: [{ title: 'Subjects', options: [{ title: 'Math', description: 'Algebra and geometry' }] }],
+          },
+        },
+      ],
+    });
+    mockedNewMessage.mockResolvedValueOnce(undefined);
+
+    await renderChat();
+    fireEvent.click(screen.getByTestId('listButton'));
+    fireEvent.click(screen.getByTestId('listOption'));
+    fireEvent.click(screen.getByTestId('listSend'));
+
+    expect(mockedNewMessage).toHaveBeenCalledWith(expect.anything(), 'Math');
+    expect(await screen.findByTestId('chosenOption')).toHaveTextContent('Algebra and geometry');
   });
 });

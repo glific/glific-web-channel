@@ -108,9 +108,34 @@ describe('<MessageBubble />', () => {
       ]);
     });
 
-    // A list nests its options inside sections; the widget has no room for WhatsApp's two-step
-    // "open the list, then choose", so they are flattened into the same buttons.
-    it('flattens a list\'s sections into options', () => {
+    // As on WhatsApp: the bubble shows one button, and the options open in a sheet from it.
+    it('shows a list as its text and one button, with the options in a sheet', () => {
+      render(
+        <MessageBubble
+          message={message({
+            flow: 'outbound',
+            body: 'Choose a subject',
+            interactive_content: { ...list, globalButtons: [{ title: 'See courses' }] },
+          })}
+          onSelectOption={vi.fn()}
+        />
+      );
+
+      expect(screen.getByTestId('interactiveContent')).toHaveTextContent('Choose a subject');
+      expect(screen.queryByTestId('listOption')).not.toBeInTheDocument();
+      expect(screen.getByTestId('listButton')).toHaveTextContent('See courses');
+
+      fireEvent.click(screen.getByTestId('listButton'));
+
+      expect(screen.getAllByTestId('listSection').map((s) => s.textContent)).toEqual(['Sciences', 'Arts']);
+      const options = screen.getAllByTestId('listOption');
+      expect(options).toHaveLength(2);
+      expect(options[0]).toHaveTextContent('Physics');
+      expect(options[0]).toHaveTextContent('Mechanics and more');
+      expect(options[1]).toHaveTextContent('Painting');
+    });
+
+    it('labels the list button "Select" when the list names none', () => {
       render(
         <MessageBubble
           message={message({ flow: 'outbound', body: 'Choose a subject', interactive_content: list })}
@@ -118,11 +143,7 @@ describe('<MessageBubble />', () => {
         />
       );
 
-      const options = screen.getAllByTestId('interactiveOption');
-      expect(options).toHaveLength(2);
-      expect(options[0]).toHaveTextContent('Physics');
-      expect(options[0]).toHaveTextContent('Mechanics and more');
-      expect(options[1]).toHaveTextContent('Painting');
+      expect(screen.getByTestId('listButton')).toHaveTextContent('Select');
     });
 
     it('answers with the option title when one is tapped', () => {
@@ -139,7 +160,7 @@ describe('<MessageBubble />', () => {
       expect(onSelectOption).toHaveBeenCalledWith({ title: 'Coding' });
     });
 
-    it('hands back the whole list option, description included', () => {
+    it('sends nothing until an option is chosen, then hands back the whole option', () => {
       const onSelectOption = vi.fn();
       render(
         <MessageBubble
@@ -148,9 +169,14 @@ describe('<MessageBubble />', () => {
         />
       );
 
-      fireEvent.click(screen.getAllByTestId('interactiveOption')[0]);
+      fireEvent.click(screen.getByTestId('listButton'));
+      expect(screen.getByTestId('listSend')).toBeDisabled();
+
+      fireEvent.click(screen.getAllByTestId('listOption')[0]);
+      fireEvent.click(screen.getByTestId('listSend'));
 
       expect(onSelectOption).toHaveBeenCalledWith({ title: 'Physics', description: 'Mechanics and more' });
+      expect(screen.queryByTestId('listSheet')).not.toBeInTheDocument();
     });
 
     it('shows the description under the title on the contact\'s list reply', () => {

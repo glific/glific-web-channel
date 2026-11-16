@@ -24,6 +24,8 @@ export interface WebChannelInteractiveContent {
   content?: { text?: string; header?: string };
   options?: WebChannelInteractiveOption[];
   items?: { title?: string; subtitle?: string; options?: WebChannelInteractiveOption[] }[];
+  // A list's button, the one control its bubble shows; the options open from it.
+  globalButtons?: { title?: string }[];
 }
 
 export interface WebChannelMessage {

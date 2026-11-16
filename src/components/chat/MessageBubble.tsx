@@ -1,5 +1,7 @@
 import { Check, CheckCheck, Download, FileText, MapPin } from 'lucide-react';
 
+import { ListMessage } from '@/components/chat/ListMessage';
+import { interactiveOptions } from '@/lib/listReplies';
 import { cn } from '@/lib/utils';
 import { formatShortTime, whatsappToJsx } from '@/lib/whatsapp';
 import type {
@@ -52,14 +54,6 @@ const LocationContent = ({ url }: { url: string }) => (
   </a>
 );
 
-const interactiveOptions = (content: WebChannelInteractiveContent): WebChannelInteractiveOption[] => {
-  if (content.type === 'quick_reply') return content.options ?? [];
-  // A list's options live one level down, inside its sections; flatten them, since the widget
-  // has no room for the two-step "open the list, then choose" flow WhatsApp uses.
-  if (content.type === 'list') return (content.items ?? []).flatMap((item) => item.options ?? []);
-  return [];
-};
-
 const InteractiveContent = ({
   content,
   body,
@@ -77,26 +71,30 @@ const InteractiveContent = ({
       {content.content?.header && <span className="font-semibold">{whatsappToJsx(content.content.header)}</span>}
       {content.type === 'list' && content.title && <span className="font-semibold">{content.title}</span>}
       {text && <span className="whitespace-pre-wrap">{whatsappToJsx(text)}</span>}
-      {options.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {options.map((option) => (
-            // Bordered in the readable shade rather than filled, so the label stays in the page's
-            // own text colour.
-            <button
-              key={option.title}
-              type="button"
-              data-testid="interactiveOption"
-              disabled={!onSelectOption}
-              onClick={() => onSelectOption?.(option)}
-              className="rounded-full border-2 border-primary px-4 py-2 text-left text-sm font-semibold hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="block">{option.title}</span>
-              {option.description && (
-                <span className="block text-xs text-muted-foreground">{option.description}</span>
-              )}
-            </button>
-          ))}
-        </div>
+      {content.type === 'list' ? (
+        <ListMessage content={content} onSelectOption={onSelectOption} />
+      ) : (
+        options.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {options.map((option) => (
+              // Bordered in the readable shade rather than filled, so the label stays in the page's
+              // own text colour.
+              <button
+                key={option.title}
+                type="button"
+                data-testid="interactiveOption"
+                disabled={!onSelectOption}
+                onClick={() => onSelectOption?.(option)}
+                className="rounded-full border-2 border-primary px-4 py-2 text-left text-sm font-semibold hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="block">{option.title}</span>
+                {option.description && (
+                  <span className="block text-xs text-muted-foreground">{option.description}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )
       )}
     </div>
   );
@@ -139,10 +137,13 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
     >
       <div
         className={cn(
-          'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
+          // WhatsApp's shape: a small radius, square at the top on the speaker's side.
+          'max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm',
           isSent
-            ? 'rounded-br-sm bg-muted text-foreground ring-1 ring-foreground/10'
-            : 'rounded-bl-sm bg-card text-card-foreground ring-1 ring-foreground/10'
+            ? 'rounded-tr-none bg-muted text-foreground ring-1 ring-foreground/10'
+            : 'rounded-tl-none bg-card text-card-foreground ring-1 ring-foreground/10',
+          // As wide as WhatsApp draws one, so its button reads as a bar rather than a tag.
+          interactive?.type === 'list' && 'w-72'
         )}
       >
         <div className="break-words whitespace-pre-wrap" data-testid="content">
