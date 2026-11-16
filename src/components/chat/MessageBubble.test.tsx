@@ -146,6 +146,52 @@ describe('<MessageBubble />', () => {
       expect(screen.getByTestId('listButton')).toHaveTextContent('Select');
     });
 
+    // WhatsApp's shape puts a location request's text in an object; rendering that object as text
+    // used to throw and blank the whole chat.
+    const locationRequest = {
+      type: 'location_request_message',
+      body: { type: 'text', text: 'Please share your location' },
+      action: { name: 'send_location' },
+    };
+
+    it('shows a location request as its text and a Send location button', () => {
+      const onShareLocation = vi.fn();
+      render(
+        <MessageBubble
+          message={message({ flow: 'outbound', body: 'Please share your location', interactive_content: locationRequest })}
+          onShareLocation={onShareLocation}
+        />
+      );
+
+      expect(screen.getByTestId('interactiveContent')).toHaveTextContent('Please share your location');
+      fireEvent.click(screen.getByTestId('sendLocationButton'));
+      expect(onShareLocation).toHaveBeenCalledTimes(1);
+    });
+
+    it('disables Send location where the browser cannot share one', () => {
+      render(
+        <MessageBubble
+          message={message({ flow: 'outbound', body: 'Please share your location', interactive_content: locationRequest })}
+        />
+      );
+
+      expect(screen.getByTestId('sendLocationButton')).toBeDisabled();
+    });
+
+    it('falls back to the message body when an interactive message carries no text', () => {
+      render(
+        <MessageBubble
+          message={message({
+            flow: 'outbound',
+            body: 'Fallback text',
+            interactive_content: { type: 'location_request_message', body: {} },
+          })}
+        />
+      );
+
+      expect(screen.getByTestId('interactiveContent')).toHaveTextContent('Fallback text');
+    });
+
     it('answers with the option title when one is tapped', () => {
       const onSelectOption = vi.fn();
       render(

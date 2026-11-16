@@ -15,6 +15,8 @@ export interface MessageBubbleProps {
   // Tapping an option answers with its title, which is exactly what WhatsApp records for an
   // interactive reply — so the conversation reads the same on either channel.
   onSelectOption?: (option: WebChannelInteractiveOption) => void;
+  // Answers a location request with the contact's current location.
+  onShareLocation?: () => void;
 }
 
 const MEDIA_TYPES = ['image', 'audio', 'video', 'document'];
@@ -54,24 +56,48 @@ const LocationContent = ({ url }: { url: string }) => (
   </a>
 );
 
+// A location request's text sits in an object; anything that is not a string must never reach
+// whatsappToJsx, which would throw and blank the whole chat.
+const interactiveText = (content: WebChannelInteractiveContent, body: string): string => {
+  const text = content.content?.text ?? (typeof content.body === 'string' ? content.body : content.body?.text);
+  return typeof text === 'string' ? text : body;
+};
+
+// The bar under a list or a location request, as WhatsApp draws it.
+const barButtonClass =
+  '-mx-3 -mb-1 mt-2 flex items-center justify-center gap-2 border-t px-3 pt-2 pb-1 font-semibold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60';
+
 const InteractiveContent = ({
   content,
   body,
   onSelectOption,
+  onShareLocation,
 }: {
   content: WebChannelInteractiveContent;
   body: string;
   onSelectOption?: (option: WebChannelInteractiveOption) => void;
+  onShareLocation?: () => void;
 }) => {
   const options = interactiveOptions(content).filter((option) => !!option.title);
-  const text = content.content?.text ?? content.body ?? body;
+  const text = interactiveText(content, body);
 
   return (
     <div className="flex flex-col gap-2" data-testid="interactiveContent">
       {content.content?.header && <span className="font-semibold">{whatsappToJsx(content.content.header)}</span>}
       {content.type === 'list' && content.title && <span className="font-semibold">{content.title}</span>}
       {text && <span className="whitespace-pre-wrap">{whatsappToJsx(text)}</span>}
-      {content.type === 'list' ? (
+      {content.type === 'location_request_message' ? (
+        <button
+          type="button"
+          data-testid="sendLocationButton"
+          disabled={!onShareLocation}
+          onClick={() => onShareLocation?.()}
+          className={barButtonClass}
+        >
+          <MapPin className="size-4" />
+          Send location
+        </button>
+      ) : content.type === 'list' ? (
         <ListMessage content={content} onSelectOption={onSelectOption} />
       ) : (
         options.length > 0 && (
@@ -119,7 +145,7 @@ const StatusTicks = ({ status }: { status?: WebChannelMessage['status'] }) =>
 
 // A lean single-conversation bubble in the WhatsApp visual style. Self-contained
 // (no staff ChatMessage coupling: no templates/managed-phone logic).
-export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) => {
+export const MessageBubble = ({ message, onSelectOption, onShareLocation }: MessageBubbleProps) => {
   // "inbound" = the end user's own message -> sent (right); "outbound" = from NGO/flow -> received (left)
   const isSent = message.flow === 'inbound';
   const mediaUrl = message.media?.url;
@@ -143,12 +169,17 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
             ? 'rounded-tr-none bg-muted text-foreground ring-1 ring-foreground/10'
             : 'rounded-tl-none bg-card text-card-foreground ring-1 ring-foreground/10',
           // Never narrower than its button reads as a bar, but no wider than its text needs.
-          interactive?.type === 'list' && 'min-w-56'
+          (interactive?.type === 'list' || interactive?.type === 'location_request_message') && 'min-w-56'
         )}
       >
         <div className="break-words whitespace-pre-wrap" data-testid="content">
           {interactive ? (
-            <InteractiveContent content={interactive} body={message.body} onSelectOption={onSelectOption} />
+            <InteractiveContent
+              content={interactive}
+              body={message.body}
+              onSelectOption={onSelectOption}
+              onShareLocation={onShareLocation}
+            />
           ) : isMedia ? (
             <MediaContent type={message.type as string} url={mediaUrl as string} caption={message.body} />
           ) : isLocation ? (

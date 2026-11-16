@@ -16,11 +16,12 @@ export interface WebChannelInteractiveOption {
 }
 
 export interface WebChannelInteractiveContent {
-  type?: 'quick_reply' | 'list' | string;
+  type?: 'quick_reply' | 'list' | 'location_request_message' | string;
   title?: string;
   // On the contact's own reply: the description of the list option they chose.
   description?: string;
-  body?: string;
+  // A list's text is a string; a location request's is an object, in WhatsApp's own shape.
+  body?: string | { text?: string; type?: string };
   content?: { text?: string; header?: string };
   options?: WebChannelInteractiveOption[];
   items?: { title?: string; subtitle?: string; options?: WebChannelInteractiveOption[] }[];

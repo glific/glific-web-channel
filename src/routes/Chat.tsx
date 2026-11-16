@@ -382,7 +382,12 @@ export const Chat = () => {
       >
         {loadingMore && <div className="py-1 text-center text-xs text-muted-foreground">Loading…</div>}
         {displayed.map((message) => (
-          <MessageBubble key={message.id} message={message} onSelectOption={handleSelectOption} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onSelectOption={handleSelectOption}
+            onShareLocation={location.isSupported && !location.isSharing ? location.share : undefined}
+          />
         ))}
       </div>
 
