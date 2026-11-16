@@ -49,7 +49,7 @@ export const ListMessage = ({ content, onSelectOption }: ListMessageProps) => {
         data-testid="listButton"
         disabled={!onSelectOption || sections.length === 0}
         onClick={() => openSheet(true)}
-        className="-mx-3 -mb-1 mt-1 flex items-center justify-center gap-2 border-t px-3 pt-2 pb-1 text-sm font-semibold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+        className="-mx-3 -mb-1 mt-2 flex items-center justify-center gap-2 border-t px-3 pt-2 pb-1 font-semibold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <List className="size-4" />
         {buttonLabel}

@@ -105,7 +105,7 @@ const InteractiveContent = ({
 const ChosenOption = ({ title, description }: { title: string; description: string }) => (
   <div className="flex flex-col" data-testid="chosenOption">
     <span>{title}</span>
-    <span className="text-xs text-muted-foreground">{description}</span>
+    <span className="text-[13px] text-muted-foreground">{description}</span>
   </div>
 );
 
@@ -138,12 +138,12 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
       <div
         className={cn(
           // WhatsApp's shape: a small radius, square at the top on the speaker's side.
-          'max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm',
+          'max-w-[75%] rounded-lg px-3 py-2 text-[15px] leading-snug shadow-sm',
           isSent
             ? 'rounded-tr-none bg-muted text-foreground ring-1 ring-foreground/10'
             : 'rounded-tl-none bg-card text-card-foreground ring-1 ring-foreground/10',
-          // As wide as WhatsApp draws one, so its button reads as a bar rather than a tag.
-          interactive?.type === 'list' && 'w-72'
+          // Never narrower than its button reads as a bar, but no wider than its text needs.
+          interactive?.type === 'list' && 'min-w-56'
         )}
       >
         <div className="break-words whitespace-pre-wrap" data-testid="content">
@@ -159,7 +159,7 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
             whatsappToJsx(message.body)
           )}
         </div>
-        <span className="mt-1 flex items-center justify-end gap-1 text-[0.65rem] text-muted-foreground tabular-nums">
+        <span className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground tabular-nums">
           <span data-testid="date">{formatShortTime(message.inserted_at)}</span>
           {isSent && <StatusTicks status={message.status} />}
         </span>
