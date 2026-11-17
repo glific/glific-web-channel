@@ -6,6 +6,7 @@ import './index.css';
 import App from './App.tsx';
 import { loadBranding } from '@/services/branding';
 import { captureTriggerKeywords } from '@/lib/triggerKeywords';
+import { whenShown } from '@/lib/whenShown';
 import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
 
 // Branding resolves BEFORE the first render, so the org's accent is already on :root by the
@@ -31,4 +32,4 @@ const bootstrap = async () => {
   );
 };
 
-void bootstrap();
+whenShown(() => void bootstrap());

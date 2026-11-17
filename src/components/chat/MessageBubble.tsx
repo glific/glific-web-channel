@@ -1,5 +1,7 @@
-import { Download, FileText, MapPin } from 'lucide-react';
+import { Check, CheckCheck, Download, FileText, MapPin } from 'lucide-react';
 
+import { ListMessage } from '@/components/chat/ListMessage';
+import { interactiveOptions } from '@/lib/listReplies';
 import { cn } from '@/lib/utils';
 import { formatShortTime, whatsappToJsx } from '@/lib/whatsapp';
 import type {
@@ -12,7 +14,9 @@ export interface MessageBubbleProps {
   message: WebChannelMessage;
   // Tapping an option answers with its title, which is exactly what WhatsApp records for an
   // interactive reply — so the conversation reads the same on either channel.
-  onSelectOption?: (title: string) => void;
+  onSelectOption?: (option: WebChannelInteractiveOption) => void;
+  // Answers a location request with the contact's current location.
+  onShareLocation?: () => void;
 }
 
 const MEDIA_TYPES = ['image', 'audio', 'video', 'document'];
@@ -52,59 +56,96 @@ const LocationContent = ({ url }: { url: string }) => (
   </a>
 );
 
-const interactiveOptions = (content: WebChannelInteractiveContent): WebChannelInteractiveOption[] => {
-  if (content.type === 'quick_reply') return content.options ?? [];
-  // A list's options live one level down, inside its sections; flatten them, since the widget
-  // has no room for the two-step "open the list, then choose" flow WhatsApp uses.
-  if (content.type === 'list') return (content.items ?? []).flatMap((item) => item.options ?? []);
-  return [];
+// A location request's text sits in an object; anything that is not a string must never reach
+// whatsappToJsx, which would throw and blank the whole chat.
+const interactiveText = (content: WebChannelInteractiveContent, body: string): string => {
+  const text = content.content?.text ?? (typeof content.body === 'string' ? content.body : content.body?.text);
+  return typeof text === 'string' ? text : body;
 };
+
+// The bar under a list or a location request, as WhatsApp draws it.
+const barButtonClass =
+  '-mx-3 -mb-1 mt-2 flex items-center justify-center gap-2 border-t px-3 pt-2 pb-1 font-semibold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60';
 
 const InteractiveContent = ({
   content,
   body,
   onSelectOption,
+  onShareLocation,
 }: {
   content: WebChannelInteractiveContent;
   body: string;
-  onSelectOption?: (title: string) => void;
+  onSelectOption?: (option: WebChannelInteractiveOption) => void;
+  onShareLocation?: () => void;
 }) => {
   const options = interactiveOptions(content).filter((option) => !!option.title);
-  const text = content.content?.text ?? content.body ?? body;
+  const text = interactiveText(content, body);
 
   return (
     <div className="flex flex-col gap-2" data-testid="interactiveContent">
       {content.content?.header && <span className="font-semibold">{whatsappToJsx(content.content.header)}</span>}
       {content.type === 'list' && content.title && <span className="font-semibold">{content.title}</span>}
       {text && <span className="whitespace-pre-wrap">{whatsappToJsx(text)}</span>}
-      {options.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {options.map((option) => (
-            // Bordered in the readable shade rather than filled, so the label stays in the page's
-            // own text colour.
-            <button
-              key={option.title}
-              type="button"
-              data-testid="interactiveOption"
-              disabled={!onSelectOption}
-              onClick={() => onSelectOption?.(option.title as string)}
-              className="rounded-full border-2 border-primary px-4 py-2 text-left text-sm font-semibold hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="block">{option.title}</span>
-              {option.description && (
-                <span className="block text-xs text-muted-foreground">{option.description}</span>
-              )}
-            </button>
-          ))}
-        </div>
+      {content.type === 'location_request_message' ? (
+        <button
+          type="button"
+          data-testid="sendLocationButton"
+          disabled={!onShareLocation}
+          onClick={() => onShareLocation?.()}
+          className={barButtonClass}
+        >
+          <MapPin className="size-4" />
+          Send location
+        </button>
+      ) : content.type === 'list' ? (
+        <ListMessage content={content} onSelectOption={onSelectOption} />
+      ) : (
+        options.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {options.map((option) => (
+              // Bordered in the readable shade rather than filled, so the label stays in the page's
+              // own text colour.
+              <button
+                key={option.title}
+                type="button"
+                data-testid="interactiveOption"
+                disabled={!onSelectOption}
+                onClick={() => onSelectOption?.(option)}
+                className="rounded-full border-2 border-primary px-4 py-2 text-left text-sm font-semibold hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="block">{option.title}</span>
+                {option.description && (
+                  <span className="block text-xs text-muted-foreground">{option.description}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )
       )}
     </div>
   );
 };
 
+// The contact's choice from a list, shown the way WhatsApp shows one: the title, and under it the
+// option's description.
+const ChosenOption = ({ title, description }: { title: string; description: string }) => (
+  <div className="flex flex-col" data-testid="chosenOption">
+    <span>{title}</span>
+    <span className="text-[13px] text-muted-foreground">{description}</span>
+  </div>
+);
+
+// No blue read tick: the widget cannot tell when an organisation has read a message.
+const StatusTicks = ({ status }: { status?: WebChannelMessage['status'] }) =>
+  status === 'pending' ? (
+    <Check className="size-3.5" aria-label="sending" data-testid="statusPending" />
+  ) : (
+    <CheckCheck className="size-3.5" aria-label="sent" data-testid="statusSent" />
+  );
+
 // A lean single-conversation bubble in the WhatsApp visual style. Self-contained
 // (no staff ChatMessage coupling: no templates/managed-phone logic).
-export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) => {
+export const MessageBubble = ({ message, onSelectOption, onShareLocation }: MessageBubbleProps) => {
   // "inbound" = the end user's own message -> sent (right); "outbound" = from NGO/flow -> received (left)
   const isSent = message.flow === 'inbound';
   const mediaUrl = message.media?.url;
@@ -113,6 +154,7 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
   // Only an inbound-to-the-browser interactive message is answerable; the contact's own echoed
   // choice is just text.
   const interactive = !isSent && message.interactive_content?.type ? message.interactive_content : null;
+  const chosenDescription = isSent ? message.interactive_content?.description : undefined;
 
   return (
     <div
@@ -121,25 +163,36 @@ export const MessageBubble = ({ message, onSelectOption }: MessageBubbleProps) =
     >
       <div
         className={cn(
-          'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
+          // WhatsApp's shape: a small radius, square at the top on the speaker's side.
+          'max-w-[75%] rounded-lg px-3 py-2 text-[15px] leading-snug shadow-sm',
           isSent
-            ? 'rounded-br-sm bg-muted text-foreground ring-1 ring-foreground/10'
-            : 'rounded-bl-sm bg-card text-card-foreground ring-1 ring-foreground/10'
+            ? 'rounded-tr-none bg-muted text-foreground ring-1 ring-foreground/10'
+            : 'rounded-tl-none bg-card text-card-foreground ring-1 ring-foreground/10',
+          // Never narrower than its button reads as a bar, but no wider than its text needs.
+          (interactive?.type === 'list' || interactive?.type === 'location_request_message') && 'min-w-56'
         )}
       >
         <div className="break-words whitespace-pre-wrap" data-testid="content">
           {interactive ? (
-            <InteractiveContent content={interactive} body={message.body} onSelectOption={onSelectOption} />
+            <InteractiveContent
+              content={interactive}
+              body={message.body}
+              onSelectOption={onSelectOption}
+              onShareLocation={onShareLocation}
+            />
           ) : isMedia ? (
             <MediaContent type={message.type as string} url={mediaUrl as string} caption={message.body} />
           ) : isLocation ? (
             <LocationContent url={message.body} />
+          ) : chosenDescription ? (
+            <ChosenOption title={message.body} description={chosenDescription} />
           ) : (
             whatsappToJsx(message.body)
           )}
         </div>
-        <span className="mt-1 block text-right text-[0.65rem] text-muted-foreground tabular-nums" data-testid="date">
-          {formatShortTime(message.inserted_at)}
+        <span className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground tabular-nums">
+          <span data-testid="date">{formatShortTime(message.inserted_at)}</span>
+          {isSent && <StatusTicks status={message.status} />}
         </span>
       </div>
     </div>

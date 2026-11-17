@@ -13,22 +13,25 @@ interface PendingAttachmentProps {
 
 /**
  * The file waiting to be sent, above the composer. A picture is shown as itself, so the contact
- * can see what they are captioning; anything else is shown by name.
+ * can see what they are captioning, and audio as a player, so a voice note can be heard before
+ * it goes; anything else is shown by name.
  */
 export const PendingAttachment = ({ pending, status, disabled, onRemove }: PendingAttachmentProps) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const isImage = pending.type === 'image';
+  const isAudio = pending.type === 'audio';
+  const previewable = isImage || isAudio;
 
   // An object URL holds the file in memory until revoked, so each one is released with the file.
   useEffect(() => {
-    if (!isImage) return;
+    if (!previewable) return;
     const url = URL.createObjectURL(pending.file);
     setPreviewUrl(url);
     return () => {
       URL.revokeObjectURL(url);
       setPreviewUrl(null);
     };
-  }, [pending.file, isImage]);
+  }, [pending.file, previewable]);
 
   const remove = (
     <Button
@@ -56,6 +59,16 @@ export const PendingAttachment = ({ pending, status, disabled, onRemove }: Pendi
           {remove}
           {status && <span className="text-xs text-muted-foreground">{status}</span>}
         </div>
+      </div>
+    );
+  }
+
+  if (isAudio && previewUrl) {
+    return (
+      <div className="flex items-center gap-2" data-testid="pendingAttachment">
+        <audio src={previewUrl} controls data-testid="pendingAudioPreview" className="h-10 min-w-0 flex-1" />
+        {status && <span className="text-xs text-muted-foreground">{status}</span>}
+        {remove}
       </div>
     );
   }

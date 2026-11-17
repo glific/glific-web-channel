@@ -3,10 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export interface AudioRecorder {
   isSupported: boolean;
   isRecording: boolean;
+  isPaused: boolean;
   seconds: number;
   error: string | null;
   start: () => Promise<void>;
   stop: () => void;
+  pause: () => void;
+  resume: () => void;
   cancel: () => void;
 }
 
@@ -44,6 +47,7 @@ const PERMISSION_ERROR = 'Microphone access is blocked. Allow it in your browser
  */
 export const useAudioRecorder = (onComplete: (file: File) => void): AudioRecorder => {
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,14 +60,23 @@ export const useAudioRecorder = (onComplete: (file: File) => void): AudioRecorde
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
-  const cleanup = useCallback(() => {
+  const stopTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+  }, []);
+
+  const startTimer = useCallback(() => {
+    stopTimer();
+    timerRef.current = setInterval(() => setSeconds((elapsed) => elapsed + 1), 1000);
+  }, [stopTimer]);
+
+  const cleanup = useCallback(() => {
+    stopTimer();
     // releases the browser's recording indicator; leaving the track live looks like eavesdropping
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     recorderRef.current = null;
-  }, []);
+  }, [stopTimer]);
 
   useEffect(() => cleanup, [cleanup]);
 
@@ -92,6 +105,7 @@ export const useAudioRecorder = (onComplete: (file: File) => void): AudioRecorde
 
         cleanup();
         setRecording(false);
+        setPaused(false);
         setSeconds(0);
 
         if (!canceled && blob.size > 0) {
@@ -101,14 +115,29 @@ export const useAudioRecorder = (onComplete: (file: File) => void): AudioRecorde
 
       recorder.start();
       setRecording(true);
+      setPaused(false);
       setSeconds(0);
-      timerRef.current = setInterval(() => setSeconds((elapsed) => elapsed + 1), 1000);
+      startTimer();
     } catch {
       cleanup();
       setRecording(false);
       setError(PERMISSION_ERROR);
     }
-  }, [cleanup]);
+  }, [cleanup, startTimer]);
+
+  const pause = useCallback(() => {
+    if (recorderRef.current?.state !== 'recording') return;
+    recorderRef.current.pause();
+    stopTimer();
+    setPaused(true);
+  }, [stopTimer]);
+
+  const resume = useCallback(() => {
+    if (recorderRef.current?.state !== 'paused') return;
+    recorderRef.current.resume();
+    startTimer();
+    setPaused(false);
+  }, [startTimer]);
 
   const stop = useCallback(() => {
     canceledRef.current = false;
@@ -120,5 +149,16 @@ export const useAudioRecorder = (onComplete: (file: File) => void): AudioRecorde
     recorderRef.current?.stop();
   }, []);
 
-  return { isSupported: isSupported(), isRecording: recording, seconds, error, start, stop, cancel };
+  return {
+    isSupported: isSupported(),
+    isRecording: recording,
+    isPaused: paused,
+    seconds,
+    error,
+    start,
+    stop,
+    pause,
+    resume,
+    cancel,
+  };
 };

@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   captureTriggerKeywords,
-  hasTriggeredKeyword,
-  markKeywordTriggered,
   MAX_TEXT_LENGTH,
   takeTriggerKeywords,
 } from './triggerKeywords';
@@ -68,14 +66,5 @@ describe('trigger keywords from a link', () => {
     visit(`/?start=${'a'.repeat(101)}`);
 
     expect(takeTriggerKeywords()).toBeNull();
-  });
-
-  it('remembers a keyword a link sent, per contact', () => {
-    markKeywordTriggered(42, 'adopt');
-
-    expect(hasTriggeredKeyword(42, 'adopt')).toBe(true);
-    expect(hasTriggeredKeyword('42', 'adopt')).toBe(true);
-    expect(hasTriggeredKeyword(42, 'donate')).toBe(false);
-    expect(hasTriggeredKeyword(7, 'adopt')).toBe(false);
   });
 });

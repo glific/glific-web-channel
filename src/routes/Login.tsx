@@ -240,7 +240,7 @@ export const Login = () => {
                 />
                 <span>
                   I agree to chat here and to <strong>{orgName}</strong> collecting my messages &amp; responses on this
-                  channel to run the programme. <strong>Required</strong>
+                  channel to run the programme.
                 </span>
               </label>
               {phoneErrors.consent && (

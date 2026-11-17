@@ -21,6 +21,14 @@ class MockMediaRecorder {
     this.state = 'recording';
   }
 
+  pause() {
+    this.state = 'paused';
+  }
+
+  resume() {
+    this.state = 'recording';
+  }
+
   stop() {
     this.state = 'inactive';
     this.ondataavailable?.({ data: new Blob(['audio-bytes'], { type: this.mimeType }) });
@@ -82,6 +90,33 @@ describe('useAudioRecorder', () => {
     expect(file.type).toContain('audio');
     // the mic indicator stays on until the track is stopped, which reads as eavesdropping
     expect(track.stop).toHaveBeenCalled();
+  });
+
+  it('pause() holds the recording and its timer, and resume() carries on', async () => {
+    vi.useFakeTimers();
+    try {
+      const onComplete = vi.fn();
+      const { result } = await startRecording(onComplete);
+
+      act(() => vi.advanceTimersByTime(2000));
+      act(() => result.current.pause());
+      expect(result.current.isPaused).toBe(true);
+      expect(result.current.isRecording).toBe(true);
+
+      act(() => vi.advanceTimersByTime(5000));
+      expect(result.current.seconds).toBe(2);
+
+      act(() => result.current.resume());
+      act(() => vi.advanceTimersByTime(1000));
+      expect(result.current.isPaused).toBe(false);
+      expect(result.current.seconds).toBe(3);
+
+      act(() => result.current.stop());
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(result.current.isPaused).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('cancel() ends the recording without delivering a File', async () => {

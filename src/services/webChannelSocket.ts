@@ -16,12 +16,17 @@ export interface WebChannelInteractiveOption {
 }
 
 export interface WebChannelInteractiveContent {
-  type?: 'quick_reply' | 'list' | string;
+  type?: 'quick_reply' | 'list' | 'location_request_message' | string;
   title?: string;
-  body?: string;
+  // On the contact's own reply: the description of the list option they chose.
+  description?: string;
+  // A list's text is a string; a location request's is an object, in WhatsApp's own shape.
+  body?: string | { text?: string; type?: string };
   content?: { text?: string; header?: string };
   options?: WebChannelInteractiveOption[];
   items?: { title?: string; subtitle?: string; options?: WebChannelInteractiveOption[] }[];
+  // A list's button, the one control its bubble shows; the options open from it.
+  globalButtons?: { title?: string }[];
 }
 
 export interface WebChannelMessage {
@@ -34,6 +39,9 @@ export interface WebChannelMessage {
   inserted_at: string;
   media?: WebChannelMedia | null;
   interactive_content?: WebChannelInteractiveContent | null;
+  // Only on the contact's own messages sent from this page: `pending` until the server accepts it.
+  // Anything the server returned is already stored, so it carries none and reads as sent.
+  status?: 'pending' | 'sent';
 }
 
 // The media types the server accepts on "new_media_message"
