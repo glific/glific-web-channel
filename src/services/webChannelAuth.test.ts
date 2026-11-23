@@ -6,8 +6,10 @@ import { tokenExpiringIn } from '@/test/token';
 import {
   clearWebChannelSession,
   decodeTokenExpiry,
+  getWebChannelSession,
   isSessionValid,
   renewToken,
+  restoreExpiredSession,
   setWebChannelSession,
   webChannelErrorStatus,
 } from './webChannelAuth';
@@ -108,5 +110,48 @@ describe('renewToken', () => {
     renewToken('current-token');
 
     expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: 'current-token' });
+  });
+});
+
+describe('restoreExpiredSession', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('swaps an expired token for a renewed one, so a returning visitor stays signed in', async () => {
+    const expired = tokenExpiringIn(-3600);
+    const renewed = tokenExpiringIn(3600);
+    setWebChannelSession({ token: expired, contactId: 7 });
+    mockedAxios.post.mockResolvedValue({ data: { data: { token: renewed, contact_id: 7, name: 'Priya' } } });
+
+    await restoreExpiredSession();
+
+    expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: expired });
+    expect(getWebChannelSession()).toEqual({ token: renewed, contactId: 7, name: 'Priya' });
+    expect(isSessionValid()).toBe(true);
+  });
+
+  it('leaves the expired session in place when the server refuses it', async () => {
+    const expired = tokenExpiringIn(-3600);
+    setWebChannelSession({ token: expired, contactId: 7 });
+    mockedAxios.post.mockRejectedValue({ response: { status: 401 } });
+
+    await restoreExpiredSession();
+
+    expect(getWebChannelSession()?.token).toBe(expired);
+    expect(isSessionValid()).toBe(false);
+  });
+
+  it('asks nothing of the server for a live token, no token or an unreadable one', async () => {
+    await restoreExpiredSession();
+
+    setWebChannelSession({ token: tokenExpiringIn(3600), contactId: 7 });
+    await restoreExpiredSession();
+
+    setWebChannelSession({ token: 'not-a-jwt', contactId: 7 });
+    await restoreExpiredSession();
+
+    expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 });

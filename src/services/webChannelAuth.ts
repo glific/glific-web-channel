@@ -45,8 +45,9 @@ export const requestOtp = (phone: string) => axios.post(WEB_CHANNEL_REQUEST_OTP,
 export const verifyOtp = (phone: string, otp: string, optin: boolean) =>
   axios.post(WEB_CHANNEL_VERIFY_OTP, { phone, otp, optin });
 
-// Same body shape as verify-otp, so a success goes straight to setWebChannelSession. 401 once the
-// current token has expired: this renews, it does not re-authenticate.
+// Same body shape as verify-otp, so a success goes straight to setWebChannelSession. The server
+// renews even an expired token until the session is 48 hours old, then answers 401: this renews,
+// it does not re-authenticate.
 export const renewToken = (token: string) => axios.post(WEB_CHANNEL_RENEW_TOKEN, { token });
 
 /**
@@ -79,6 +80,25 @@ export const isSessionValid = (): boolean => {
 
   const expiry = decodeTokenExpiry(token);
   return expiry !== null && expiry * 1000 > Date.now();
+};
+
+/**
+ * Swaps a stored token that expired while the widget was closed for a fresh one, so a beneficiary
+ * returning within the session's 48 hours is not asked for a new code. Run before the first
+ * render, because the route guards treat an expired token as signed out. Any failure leaves the
+ * stale session for the guards to clear.
+ */
+export const restoreExpiredSession = async (): Promise<void> => {
+  const token = getWebChannelToken();
+  if (!token || isSessionValid() || decodeTokenExpiry(token) === null) return;
+
+  try {
+    const { data } = await renewToken(token);
+    const { token: renewed, contact_id: contactId, name, phone } = data?.data ?? {};
+    if (renewed) setWebChannelSession({ token: renewed, contactId, name, phone });
+  } catch {
+    // Refused, or never answered: the guards sign the user out either way.
+  }
 };
 
 interface WebChannelErrorResponse {

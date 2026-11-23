@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router';
 import './index.css';
 import App from './App.tsx';
 import { loadBranding } from '@/services/branding';
+import { restoreExpiredSession } from '@/services/webChannelAuth';
 import { captureTriggerKeywords } from '@/lib/triggerKeywords';
 import { whenShown } from '@/lib/whenShown';
 import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
@@ -17,7 +18,7 @@ import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
 // as the wrong organisation rather than as a failure.
 const bootstrap = async () => {
   captureTriggerKeywords();
-  const status = await loadBranding();
+  const [status] = await Promise.all([loadBranding(), restoreExpiredSession()]);
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
