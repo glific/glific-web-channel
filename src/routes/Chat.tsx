@@ -28,6 +28,7 @@ import {
 import { clearWebChannelSession, getWebChannelContact, getWebChannelToken } from '@/services/webChannelAuth';
 import { withChosenDescriptions } from '@/lib/listReplies';
 import { takeTriggerKeywords } from '@/lib/triggerKeywords';
+import { track } from '@/lib/analytics';
 
 const PAGE_SIZE = 100;
 
@@ -104,14 +105,17 @@ export const Chat = () => {
 
   // Shown at once with a single tick, which turns double only when the server accepts it. A send
   // that fails or never reaches the server (the contact is offline) keeps the single tick.
+  //
+  // `source` is for analytics only: what the contact did to send it, never what it said.
   const sendText = useCallback(
-    (channel: Channel, body: string) => {
+    (channel: Channel, body: string, source: 'composer' | 'list_reply' | 'link') => {
       const id = appendLocal({ body, type: 'text', status: 'pending' });
 
       pushNewMessage(channel, body)
-        .then(() =>
-          setMessages((prev) => prev.map((message) => (message.id === id ? { ...message, status: 'sent' } : message)))
-        )
+        .then(() => {
+          track('message_sent', { type: 'text', source });
+          setMessages((prev) => prev.map((message) => (message.id === id ? { ...message, status: 'sent' } : message)));
+        })
         .catch(() => {});
     },
     [appendLocal]
@@ -121,6 +125,7 @@ export const Chat = () => {
 
   const handleMediaSent = useCallback(
     (sent: OutboundMedia) => {
+      track('message_sent', { type: sent.type, source: 'composer' });
       appendLocal({
         body: sent.caption ?? '',
         type: sent.type,
@@ -132,8 +137,10 @@ export const Chat = () => {
   );
 
   const handleLocationSent = useCallback(
-    ({ latitude, longitude }: SharedLocation) =>
-      appendLocal({ body: `https://www.google.com/maps?q=${latitude},${longitude}`, type: 'location' }),
+    ({ latitude, longitude }: SharedLocation) => {
+      track('message_sent', { type: 'location', source: 'composer' });
+      return appendLocal({ body: `https://www.google.com/maps?q=${latitude},${longitude}`, type: 'location' });
+    },
     [appendLocal]
   );
 
@@ -218,7 +225,7 @@ export const Chat = () => {
 
     if (link.text) setDraft((current) => current || (link.text as string));
 
-    if (link.start) sendText(channel, link.start);
+    if (link.start) sendText(channel, link.start, 'link');
   };
 
   // open socket + join channel on mount
@@ -305,7 +312,8 @@ export const Chat = () => {
   const handleSelectOption = (option: WebChannelInteractiveOption) => {
     if (!channelRef.current || !option.title) return;
 
-    sendText(channelRef.current, option.title);
+    track('list_reply_selected');
+    sendText(channelRef.current, option.title, 'list_reply');
   };
 
   const handleSend = () => {
@@ -319,10 +327,11 @@ export const Chat = () => {
     if (!body || !channelRef.current) return;
 
     setDraft('');
-    sendText(channelRef.current, body);
+    sendText(channelRef.current, body, 'composer');
   };
 
   const handleLogout = () => {
+    track('logged_out');
     disconnect(socketRef.current, channelRef.current);
     clearWebChannelSession();
     navigate('/login');

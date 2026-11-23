@@ -4,9 +4,13 @@ import axios from 'axios';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { WEB_CHANNEL_OTP_RESEND_SECONDS, WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
+import { identifyContact, track } from '@/lib/analytics';
+import { setMonitoringUser } from '@/lib/monitoring';
 import { Login } from './Login';
 
 vi.mock('axios');
+vi.mock('@/lib/analytics', () => ({ identifyContact: vi.fn(), track: vi.fn(), resetAnalytics: vi.fn() }));
+vi.mock('@/lib/monitoring', () => ({ setMonitoringUser: vi.fn(), clearMonitoringUser: vi.fn() }));
 const mockedAxios = axios as any;
 
 const BRANDING = {
@@ -129,10 +133,10 @@ describe('<Login />', () => {
     renderLogin();
     await waitFor(() => expect(screen.getByTestId('phoneInput')).toBeInTheDocument());
 
-    submitPhone('9820198765');
+    submitPhone('9999999999');
 
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919820198765' })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919999999999' })
     );
   });
 
@@ -140,10 +144,10 @@ describe('<Login />', () => {
     renderLogin();
     await waitFor(() => expect(screen.getByTestId('phoneInput')).toBeInTheDocument());
 
-    submitPhone('98201-98765');
+    submitPhone('99999-99999');
 
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919820198765' })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919999999999' })
     );
   });
 
@@ -193,6 +197,34 @@ describe('<Login />', () => {
     });
   });
 
+  it('identifies the signed-in contact to analytics and monitoring by contact id only', async () => {
+    renderLogin();
+    await goToOtpStep();
+
+    enterCode('123456');
+
+    await waitFor(() => expect(screen.getByText('Chat Window')).toBeInTheDocument());
+    expect(identifyContact).toHaveBeenCalledWith(77);
+    expect(setMonitoringUser).toHaveBeenCalledWith(77);
+    expect(track).toHaveBeenCalledWith('otp_requested');
+    expect(track).toHaveBeenCalledWith('otp_verified');
+  });
+
+  it('records a failed verification by status, without the code or the number', async () => {
+    mockedAxios.post.mockImplementation((url: string) =>
+      url === WEB_CHANNEL_VERIFY_OTP
+        ? Promise.reject({ response: { status: 401, data: {} } })
+        : Promise.resolve({ data: {} })
+    );
+    renderLogin();
+    await goToOtpStep();
+
+    enterCode('123456');
+
+    await waitFor(() => expect(track).toHaveBeenCalledWith('otp_verify_failed', { status: 401 }));
+    expect(identifyContact).not.toHaveBeenCalled();
+  });
+
   it('submits as soon as the last digit lands, without reaching for the button', async () => {
     renderLogin();
     await goToOtpStep();
@@ -217,9 +249,9 @@ describe('<Login />', () => {
 
   it('says the code comes over WhatsApp, and to which number', async () => {
     renderLogin();
-    await goToOtpStep('9820198765');
+    await goToOtpStep('9999999999');
 
-    expect(screen.getByTestId('otpSentTo')).toHaveTextContent('Sent on WhatsApp to +919820198765');
+    expect(screen.getByTestId('otpSentTo')).toHaveTextContent('Sent on WhatsApp to +919999999999');
   });
 
   it('shows the wrong-code copy on a 401 from verify-otp', async () => {
@@ -399,20 +431,20 @@ describe('<Login />', () => {
 
   it('returns to the phone step with the number still there, so a typo is a correction', async () => {
     renderLogin();
-    await goToOtpStep('9820198765');
+    await goToOtpStep('9999999999');
 
     fireEvent.click(screen.getByTestId('otpBack'));
 
     await waitFor(() => expect(screen.getByText('Enter your phone number to continue')).toBeInTheDocument());
     // Still filled rather than blank: the user is correcting a digit, not starting over. Consent
     // stays given too — it was given for this channel, not for the number they mistyped.
-    expect(screen.getByTestId('phoneInput')).toHaveValue('9820198765');
+    expect(screen.getByTestId('phoneInput')).toHaveValue('9999999999');
     expect(screen.getByTestId('consentCheckbox')).toBeChecked();
   });
 
   it('sends the code to the corrected number after going back', async () => {
     renderLogin();
-    await goToOtpStep('9820198765');
+    await goToOtpStep('9999999999');
 
     fireEvent.click(screen.getByTestId('otpBack'));
     await waitFor(() => expect(screen.getByText('Enter your phone number to continue')).toBeInTheDocument());

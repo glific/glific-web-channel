@@ -10,11 +10,14 @@ import {
   pushNewLocationMessage,
   pushNewMessage,
 } from '@/services/webChannelSocket';
+import { track } from '@/lib/analytics';
 import { Chat } from './Chat';
 import { About } from './About';
 
+vi.mock('@/lib/analytics', () => ({ track: vi.fn() }));
+
 vi.mock('@/services/webChannelAuth', () => ({
-  getWebChannelContact: () => ({ contactId: 1, name: 'Priya', phone: '+919820198765' }),
+  getWebChannelContact: () => ({ contactId: 1, name: 'Priya', phone: '+919999999999' }),
   getWebChannelToken: () => 'contact-token',
   clearWebChannelSession: vi.fn(),
 }));
@@ -533,7 +536,7 @@ describe('the chat header and menu', () => {
     fireEvent.click(screen.getByTestId('chatMenuButton'));
 
     expect(screen.getByTestId('menuProfile')).toHaveTextContent('Priya');
-    expect(screen.getByTestId('menuProfile')).toHaveTextContent('+919820198765');
+    expect(screen.getByTestId('menuProfile')).toHaveTextContent('+919999999999');
     // No endpoint lets a contact change their own name or number, so there is nothing to press.
     expect(screen.getByTestId('menuProfile').tagName).toBe('DIV');
   });
@@ -554,6 +557,7 @@ describe('the chat header and menu', () => {
     fireEvent.click(screen.getByTestId('menuLogout'));
 
     expect(clearWebChannelSession).toHaveBeenCalled();
+    expect(track).toHaveBeenCalledWith('logged_out');
   });
 });
 

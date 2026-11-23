@@ -33,13 +33,16 @@ const cleanKeyword = (value: string | null) => {
 /**
  * Read a link's `text` and `start` before anything routes, since every redirect replaces the URL
  * and drops its query. Keeps them for the chat to pick up, and takes them off the address bar so
- * a reload or a bookmark of the current page doesn't carry them again.
+ * a reload or a bookmark of the current page doesn't carry them again. Returns what it kept.
  */
-export const captureTriggerKeywords = (location: Location = window.location, history: History = window.history): void => {
+export const captureTriggerKeywords = (
+  location: Location = window.location,
+  history: History = window.history
+): TriggerKeywords | null => {
   const params = new URLSearchParams(location.search);
   const link: TriggerKeywords = { text: cleanText(params.get('text')), start: cleanKeyword(params.get('start')) };
 
-  if (!params.has('text') && !params.has('start')) return;
+  if (!params.has('text') && !params.has('start')) return null;
 
   if (link.text || link.start) sessionStorage.setItem(AUTO_TRIGGER_KEYWORDS, JSON.stringify(link));
 
@@ -47,6 +50,8 @@ export const captureTriggerKeywords = (location: Location = window.location, his
   params.delete('start');
   const query = params.toString();
   history.replaceState(history.state, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+
+  return link.text || link.start ? link : null;
 };
 
 /** The link waiting for the chat, removed as it is read so it applies once. */

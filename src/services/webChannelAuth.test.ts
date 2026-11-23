@@ -2,6 +2,8 @@ import axios from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { WEB_CHANNEL_RENEW_TOKEN } from '@/config';
+import { resetAnalytics } from '@/lib/analytics';
+import { clearMonitoringUser } from '@/lib/monitoring';
 import { tokenExpiringIn } from '@/test/token';
 import {
   clearWebChannelSession,
@@ -13,6 +15,8 @@ import {
 } from './webChannelAuth';
 
 vi.mock('axios');
+vi.mock('@/lib/analytics', () => ({ resetAnalytics: vi.fn() }));
+vi.mock('@/lib/monitoring', () => ({ clearMonitoringUser: vi.fn() }));
 const mockedAxios = axios as any;
 
 // Build a token whose payload is whatever we say, so the malformed cases are explicit.
@@ -108,5 +112,18 @@ describe('renewToken', () => {
     renewToken('current-token');
 
     expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: 'current-token' });
+  });
+});
+
+describe('clearWebChannelSession', () => {
+  it('forgets the contact in analytics and error monitoring as well as in storage', () => {
+    vi.clearAllMocks();
+    setWebChannelSession({ token: tokenExpiringIn(3600), contactId: 77 });
+
+    clearWebChannelSession();
+
+    expect(localStorage.getItem('web_channel_session')).toBeNull();
+    expect(resetAnalytics).toHaveBeenCalledTimes(1);
+    expect(clearMonitoringUser).toHaveBeenCalledTimes(1);
   });
 });
