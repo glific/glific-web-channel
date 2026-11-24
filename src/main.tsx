@@ -16,13 +16,17 @@ import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
 // If it could not be fetched at all we render an error page rather than the app: falling back to
 // the default palette would serve a Glific-looking page under the NGO's own domain, which reads
 // as the wrong organisation rather than as a failure.
+//
+// The same page shows when an expired session could not be renewed because the server never
+// answered: rendering the app would let the route guards sign out a contact the server may still
+// accept, and "Try again" reloads with the session kept.
 const bootstrap = async () => {
   captureTriggerKeywords();
-  const [status] = await Promise.all([loadBranding(), restoreExpiredSession()]);
+  const [status, restore] = await Promise.all([loadBranding(), restoreExpiredSession()]);
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      {status === 'unavailable' ? (
+      {status === 'unavailable' || restore === 'unreachable' ? (
         <BrandingUnavailable />
       ) : (
         <BrowserRouter>

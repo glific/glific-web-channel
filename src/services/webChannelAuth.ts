@@ -48,7 +48,10 @@ export const verifyOtp = (phone: string, otp: string, optin: boolean) =>
 // Same body shape as verify-otp, so a success goes straight to setWebChannelSession. The server
 // renews even an expired token until the session is 48 hours old, then answers 401: this renews,
 // it does not re-authenticate.
-export const renewToken = (token: string) => axios.post(WEB_CHANNEL_RENEW_TOKEN, { token });
+export const renewToken = (token: string, timeout?: number) =>
+  timeout === undefined
+    ? axios.post(WEB_CHANNEL_RENEW_TOKEN, { token })
+    : axios.post(WEB_CHANNEL_RENEW_TOKEN, { token }, { timeout });
 
 /**
  * The `exp` claim, for SCHEDULING ONLY — this verifies nothing. The payload is base64url, not
@@ -82,23 +85,44 @@ export const isSessionValid = (): boolean => {
   return expiry !== null && expiry * 1000 > Date.now();
 };
 
+// The first paint waits on this, so a hung request must not hold a blank page for the browser's
+// own timeout. Two tries at most, so a dead network costs about 13 seconds before the retry page.
+const RESTORE_TIMEOUT_MS = 6_000;
+const RESTORE_ATTEMPTS = 2;
+const RESTORE_RETRY_DELAY_MS = 1_000;
+
+/** `unreachable`: the server never gave an answer, so the session is neither renewed nor refused. */
+export type RestoreResult = 'done' | 'unreachable';
+
+const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 /**
  * Swaps a stored token that expired while the widget was closed for a fresh one, so a beneficiary
  * returning within the session's 48 hours is not asked for a new code. Run before the first
- * render, because the route guards treat an expired token as signed out. Any failure leaves the
- * stale session for the guards to clear.
+ * render, because the route guards treat an expired token as signed out.
+ *
+ * A refusal (4xx) leaves the stale session for the guards to clear. No answer or a 5xx is retried
+ * once and then reported as `unreachable`, with the session kept: signing someone out over a
+ * dropped connection is the worse failure, as in useSessionRefresh.
  */
-export const restoreExpiredSession = async (): Promise<void> => {
+export const restoreExpiredSession = async (): Promise<RestoreResult> => {
   const token = getWebChannelToken();
-  if (!token || isSessionValid() || decodeTokenExpiry(token) === null) return;
+  if (!token || isSessionValid() || decodeTokenExpiry(token) === null) return 'done';
 
-  try {
-    const { data } = await renewToken(token);
-    const { token: renewed, contact_id: contactId, name, phone } = data?.data ?? {};
-    if (renewed) setWebChannelSession({ token: renewed, contactId, name, phone });
-  } catch {
-    // Refused, or never answered: the guards sign the user out either way.
+  for (let attempt = 1; attempt <= RESTORE_ATTEMPTS; attempt += 1) {
+    try {
+      const { data } = await renewToken(token, RESTORE_TIMEOUT_MS);
+      const { token: renewed, contact_id: contactId, name, phone } = data?.data ?? {};
+      if (renewed) setWebChannelSession({ token: renewed, contactId, name, phone });
+      return 'done';
+    } catch (error) {
+      const status = webChannelErrorStatus(error);
+      if (status !== null && status < 500) return 'done';
+      if (attempt < RESTORE_ATTEMPTS) await wait(RESTORE_RETRY_DELAY_MS);
+    }
   }
+
+  return 'unreachable';
 };
 
 interface WebChannelErrorResponse {
