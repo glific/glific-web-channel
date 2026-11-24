@@ -62,10 +62,21 @@ export const scrubValue = (value: unknown, depth = 0): unknown => {
   );
 };
 
+// Sentry describes a clicked element by its attributes, e.g. img[alt="<the image's caption>"].
+const ELEMENT_ATTRIBUTE_VALUE = /(\[[\w-]+=)"[^"]*"\]/g;
+
+const scrubBreadcrumbMessage = ({ category, message }: Breadcrumb): string | undefined => {
+  if (!message) return message;
+  // The joined console arguments, which can be anything the app logged, message text included.
+  if (category === 'console') return FILTERED;
+  if (category?.startsWith('ui.')) return scrubText(message.replace(ELEMENT_ATTRIBUTE_VALUE, `$1"${FILTERED}"]`));
+  return scrubText(message);
+};
+
 export const scrubBreadcrumb = (breadcrumb: Breadcrumb): Breadcrumb => {
   const scrubbed: Breadcrumb = { ...breadcrumb };
 
-  if (scrubbed.message) scrubbed.message = scrubText(scrubbed.message);
+  if (scrubbed.message) scrubbed.message = scrubBreadcrumbMessage(scrubbed);
 
   if (scrubbed.data) {
     // Console arguments and request/response payloads are dropped rather than masked: they are

@@ -90,6 +90,13 @@ export const initAnalytics = async ({
       // scrubs them, and an unscrubbed exception message could carry what a contact typed.
       capture_exceptions: false,
       disable_surveys: true,
+      // Every organisation is a subdomain of glific.com: a cookie on .glific.com would link one
+      // beneficiary across NGOs, and a logout on one would reset another's open tab.
+      cross_subdomain_cookie: false,
+      // Stops the project's remote settings from loading extra scripts, such as console-log
+      // capture, which this config cannot otherwise switch off.
+      disable_external_dependency_loading: true,
+      capture_performance: false,
       // A backstop for the ordering above: a link pasted later, or a referrer, still loses them.
       mask_personal_data_properties: true,
       custom_personal_data_properties: PRIVATE_URL_PARAMS,

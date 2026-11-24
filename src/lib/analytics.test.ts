@@ -57,6 +57,9 @@ describe('analytics', () => {
           capture_exceptions: false,
           rageclick: false,
           capture_heatmaps: false,
+          cross_subdomain_cookie: false,
+          disable_external_dependency_loading: true,
+          capture_performance: false,
           mask_personal_data_properties: true,
           custom_personal_data_properties: ['text', 'start'],
         })

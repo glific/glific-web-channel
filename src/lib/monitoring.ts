@@ -8,7 +8,7 @@ import { scrubBreadcrumb, scrubEvent } from '@/lib/scrub';
 // The cost is that an error thrown before the chunk arrives is not reported; render errors caught
 // by ErrorBoundary are queued and are not lost.
 
-type SentryModule = typeof import('@sentry/react');
+type SentryModule = typeof import('@/lib/sentrySdk');
 type Call = (sentry: SentryModule) => void;
 
 let client: SentryModule | null = null;
@@ -63,7 +63,7 @@ export const initMonitoring = async ({
   queue = [];
 
   try {
-    const sentry = await import('@sentry/react');
+    const sentry = await import('@/lib/sentrySdk');
 
     sentry.init({
       dsn,

@@ -175,11 +175,22 @@ The people using this app are an NGO's beneficiaries, so both are held to the sa
 - **No PII.** No phone numbers, names or message text. A contact is identified only by their
   Glific contact id, and forgotten (`posthog.reset()`, Sentry user cleared) when the session ends —
   logout, expiry or a refused renewal all go through `clearWebChannelSession()`.
-- **No session replay**, and in PostHog no autocapture, heatmaps or rage clicks. Only the events in
-  `src/lib/analytics.ts` are sent, each tagged `app: 'web_channel'` and `org_host`.
+- **No session replay**, and in PostHog no autocapture, heatmaps, rage clicks, web vitals or
+  remotely loaded extensions. PostHog sends the events in `src/lib/analytics.ts`, each tagged
+  `app: 'web_channel'` and `org_host`, plus its own `$pageview`/`$pageleave` (page URL and referrer,
+  with `text`/`start` masked), `$identify` and `$groupidentify`. Its cookie stays on the
+  organisation's own host, so a contact is not linked across organisations.
 - **Sentry reports are scrubbed** before sending (`src/lib/scrub.ts`): phone-like numbers, six-digit
   codes, JWTs and the `text`/`start`/`token`/`phone`/`otp` URL parameters are masked; request
-  bodies, cookies and console arguments are dropped; `sendDefaultPii` is off.
+  bodies, cookies and console messages are dropped, and so are the attribute values (`alt`,
+  `aria-label`, …) in click breadcrumbs; `sendDefaultPii` is off.
+
+**Required project settings.** Both services store the client's IP address unless told not to,
+and the SDK cannot stop it:
+
+- PostHog: **Settings → Project → Discard client IP data** on.
+- Sentry: **Settings → Projects → (project) → Security & Privacy → Prevent Storing of IP
+  Addresses** on.
 
 Call them only through `src/lib/analytics.ts` and `src/lib/monitoring.ts`, never the SDKs directly:
 that is what keeps "nothing unless configured" true everywhere. A render crash is caught by

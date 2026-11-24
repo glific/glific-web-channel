@@ -38,15 +38,28 @@ describe('scrubText', () => {
 });
 
 describe('scrubBreadcrumb', () => {
-  it('drops console arguments, which can carry message text', () => {
+  it('drops console arguments and message, which can carry message text', () => {
     const crumb = scrubBreadcrumb({
       category: 'console',
-      message: `sending to ${PHONE}`,
-      data: { arguments: ['my private message'], logger: 'console' },
+      message: 'Error: hello I need help with my loan',
+      data: { arguments: ['Error: hello I need help with my loan'], logger: 'console' },
     });
 
-    expect(crumb.message).toBe('sending to [phone]');
+    expect(crumb.message).toBe('[Filtered]');
     expect(crumb.data).toEqual({ logger: 'console' });
+  });
+
+  it('drops the attribute values of a clicked element, such as an image caption', () => {
+    const crumb = scrubBreadcrumb({
+      category: 'ui.click',
+      message: 'div.bubble > img.max-h-64[alt="my son has fever"][title="my son has fever"]',
+    });
+
+    expect(crumb.message).toBe('div.bubble > img.max-h-64[alt="[Filtered]"][title="[Filtered]"]');
+  });
+
+  it('still masks identifiers in other breadcrumbs', () => {
+    expect(scrubBreadcrumb({ category: 'navigation', message: `to ${PHONE}` }).message).toBe('to [phone]');
   });
 
   it('keeps an xhr/fetch breadcrumb to its method, status and scrubbed url, never its body', () => {
