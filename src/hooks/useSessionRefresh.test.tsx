@@ -61,7 +61,7 @@ const renderWithSession = (token: string) => {
 
 const renewSucceedsWith = (token: string) =>
   mockedAxios.post.mockResolvedValue({
-    data: { data: { token, contact_id: 7, name: 'Priya', phone: '919820198765' } },
+    data: { data: { token, contact_id: 7, name: 'Priya', phone: '919999999999' } },
   });
 
 describe('useSessionRefresh', () => {

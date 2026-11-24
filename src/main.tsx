@@ -6,6 +6,7 @@ import './index.css';
 import App from './App.tsx';
 import { loadBranding } from '@/services/branding';
 import { captureTriggerKeywords } from '@/lib/triggerKeywords';
+import { initPostHog, initSentry } from '@/lib/telemetry';
 import { whenShown } from '@/lib/whenShown';
 import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
 
@@ -16,7 +17,11 @@ import { BrandingUnavailable } from '@/components/branding/BrandingUnavailable';
 // the default palette would serve a Glific-looking page under the NGO's own domain, which reads
 // as the wrong organisation rather than as a failure.
 const bootstrap = async () => {
+  // In this order, so PostHog's first pageview cannot record a link's ?text=/?start=.
   captureTriggerKeywords();
+  void initSentry();
+  void initPostHog();
+
   const status = await loadBranding();
 
   createRoot(document.getElementById('root')!).render(

@@ -129,10 +129,10 @@ describe('<Login />', () => {
     renderLogin();
     await waitFor(() => expect(screen.getByTestId('phoneInput')).toBeInTheDocument());
 
-    submitPhone('9820198765');
+    submitPhone('9999999999');
 
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919820198765' })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919999999999' })
     );
   });
 
@@ -140,10 +140,10 @@ describe('<Login />', () => {
     renderLogin();
     await waitFor(() => expect(screen.getByTestId('phoneInput')).toBeInTheDocument());
 
-    submitPhone('98201-98765');
+    submitPhone('99999-99999');
 
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919820198765' })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_REQUEST_OTP, { phone: '+919999999999' })
     );
   });
 
@@ -217,9 +217,9 @@ describe('<Login />', () => {
 
   it('says the code comes over WhatsApp, and to which number', async () => {
     renderLogin();
-    await goToOtpStep('9820198765');
+    await goToOtpStep('9999999999');
 
-    expect(screen.getByTestId('otpSentTo')).toHaveTextContent('Sent on WhatsApp to +919820198765');
+    expect(screen.getByTestId('otpSentTo')).toHaveTextContent('Sent on WhatsApp to +919999999999');
   });
 
   it('shows the wrong-code copy on a 401 from verify-otp', async () => {
@@ -399,20 +399,20 @@ describe('<Login />', () => {
 
   it('returns to the phone step with the number still there, so a typo is a correction', async () => {
     renderLogin();
-    await goToOtpStep('9820198765');
+    await goToOtpStep('9999999999');
 
     fireEvent.click(screen.getByTestId('otpBack'));
 
     await waitFor(() => expect(screen.getByText('Enter your phone number to continue')).toBeInTheDocument());
     // Still filled rather than blank: the user is correcting a digit, not starting over. Consent
     // stays given too — it was given for this channel, not for the number they mistyped.
-    expect(screen.getByTestId('phoneInput')).toHaveValue('9820198765');
+    expect(screen.getByTestId('phoneInput')).toHaveValue('9999999999');
     expect(screen.getByTestId('consentCheckbox')).toBeChecked();
   });
 
   it('sends the code to the corrected number after going back', async () => {
     renderLogin();
-    await goToOtpStep('9820198765');
+    await goToOtpStep('9999999999');
 
     fireEvent.click(screen.getByTestId('otpBack'));
     await waitFor(() => expect(screen.getByText('Enter your phone number to continue')).toBeInTheDocument());

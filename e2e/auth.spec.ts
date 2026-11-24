@@ -59,7 +59,7 @@ test.describe('signing in with an OTP', () => {
     await serveOtpRequestError(page, 422, 'Phone number is not valid because invalid country code.');
 
     await page.goto('/login');
-    await submitPhone(page, '919820198765');
+    await submitPhone(page, '919999999999');
 
     // 422 text is already user-facing, so it is shown as sent rather than replaced.
     await expect(page.getByTestId('phoneRequestError')).toContainText('not valid');
