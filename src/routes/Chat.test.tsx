@@ -10,11 +10,8 @@ import {
   pushNewLocationMessage,
   pushNewMessage,
 } from '@/services/webChannelSocket';
-import { track } from '@/lib/analytics';
 import { Chat } from './Chat';
 import { About } from './About';
-
-vi.mock('@/lib/analytics', () => ({ track: vi.fn() }));
 
 vi.mock('@/services/webChannelAuth', () => ({
   getWebChannelContact: () => ({ contactId: 1, name: 'Priya', phone: '+919999999999' }),
@@ -557,7 +554,6 @@ describe('the chat header and menu', () => {
     fireEvent.click(screen.getByTestId('menuLogout'));
 
     expect(clearWebChannelSession).toHaveBeenCalled();
-    expect(track).toHaveBeenCalledWith('logged_out');
   });
 });
 

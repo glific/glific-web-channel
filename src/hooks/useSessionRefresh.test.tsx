@@ -12,13 +12,9 @@ import {
 import { getWebChannelSession, setWebChannelSession } from '@/services/webChannelAuth';
 import { isWebChannelEnabled } from '@/services/branding';
 import { tokenExpiringIn } from '@/test/token';
-import { resetAnalytics } from '@/lib/analytics';
-import { clearMonitoringUser } from '@/lib/monitoring';
 import { useSessionRefresh } from './useSessionRefresh';
 
 vi.mock('axios');
-vi.mock('@/lib/analytics', () => ({ resetAnalytics: vi.fn() }));
-vi.mock('@/lib/monitoring', () => ({ clearMonitoringUser: vi.fn() }));
 const mockedAxios = axios as any;
 
 // The socket is stood in for so the hook's two halves can be driven independently: the channel it
@@ -180,8 +176,6 @@ describe('useSessionRefresh', () => {
 
     expect(await screen.findByText('LOGIN SCREEN')).toBeInTheDocument();
     expect(getWebChannelSession()).toBeNull();
-    expect(resetAnalytics).toHaveBeenCalled();
-    expect(clearMonitoringUser).toHaveBeenCalled();
   });
 
   it('keeps the session on a network error and retries on the next tick', async () => {
@@ -330,8 +324,6 @@ describe('useSessionRefresh', () => {
 
     expect(await screen.findByText('LOGIN SCREEN')).toBeInTheDocument();
     expect(getWebChannelSession()).toBeNull();
-    expect(resetAnalytics).toHaveBeenCalled();
-    expect(clearMonitoringUser).toHaveBeenCalled();
   });
 
   // Switching the channel off has to end the conversation in every open browser, not only stop

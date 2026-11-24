@@ -1,7 +1,4 @@
-import { useEffect } from 'react';
-
 import { getBranding } from '@/services/branding';
-import { track } from '@/lib/analytics';
 
 // Shown instead of the app when this organisation has not switched the web channel on — either
 // the branding endpoint said so at boot, or the organisation switched it off while the tab was
@@ -18,8 +15,6 @@ import { track } from '@/lib/analytics';
 // the backend momentarily unreachable, and "not enabled" would be the wrong thing to say. That
 // case renders BrandingUnavailable, which offers a retry.
 export const WebChannelDisabled = () => {
-  useEffect(() => track('web_channel_disabled_shown'), []);
-
   const { display_name: displayName, whatsapp_number: whatsappNumber } = getBranding();
 
   return (

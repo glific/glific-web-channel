@@ -164,46 +164,20 @@ and a retry would fail on the throttle rather than on whatever went wrong.
 
 ## Analytics and error monitoring
 
-Both are **off unless configured**. With no `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN` PostHog is never
-downloaded, and with no `VITE_PUBLIC_SENTRY_DSN` neither is Sentry: each SDK sits in its own chunk
-behind a dynamic `import()`, so an unconfigured build costs beneficiaries nothing on first paint.
-Both start only after a link's `?text=`/`?start=` has been taken off the address bar.
-
-The people using this app are an NGO's beneficiaries, so both are held to the same limits
-(glific/glific#6195):
-
-- **No PII.** No phone numbers, names or message text. A contact is identified only by their
-  Glific contact id, and forgotten (`posthog.reset()`, Sentry user cleared) when the session ends —
-  logout, expiry or a refused renewal all go through `clearWebChannelSession()`.
-- **No session replay**, and in PostHog no autocapture, heatmaps, rage clicks, web vitals or
-  remotely loaded extensions. PostHog sends the events in `src/lib/analytics.ts`, each tagged
-  `app: 'web_channel'` and `org_host`, plus its own `$pageview`/`$pageleave` (page URL and referrer,
-  with `text`/`start` masked), `$identify` and `$groupidentify`. Its cookie stays on the
-  organisation's own host, so a contact is not linked across organisations.
-- **Sentry reports are scrubbed** before sending (`src/lib/scrub.ts`): phone-like numbers, six-digit
-  codes, JWTs and the `text`/`start`/`token`/`phone`/`otp` URL parameters are masked; request
-  bodies, cookies and console messages are dropped, and so are the attribute values (`alt`,
-  `aria-label`, …) in click breadcrumbs; `sendDefaultPii` is off.
-
-**Required project settings.** Both services store the client's IP address unless told not to,
-and the SDK cannot stop it:
-
-- PostHog: **Settings → Project → Discard client IP data** on.
-- Sentry: **Settings → Projects → (project) → Security & Privacy → Prevent Storing of IP
-  Addresses** on.
-
-Call them only through `src/lib/analytics.ts` and `src/lib/monitoring.ts`, never the SDKs directly:
-that is what keeps "nothing unless configured" true everywhere. A render crash is caught by
-`ErrorBoundary`, reported, and shows the same "Something went wrong" page as a failed branding load.
+PostHog (web analytics) and Sentry (error monitoring) start only when their keys are set, and are
+loaded as separate chunks, so a build without keys downloads neither. The app sends no custom
+events. PostHog runs with autocapture, session replay and exception capture on (replay also needs
+recording turned on in the PostHog project); Sentry runs with `sendDefaultPii: false`.
 
 | Variable | |
 |---|---|
-| `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN` | the web channel's own PostHog project, not glific-frontend's |
+| `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN` | the web channel's own PostHog project |
 | `VITE_PUBLIC_POSTHOG_HOST` | defaults to `https://us.i.posthog.com` |
 | `VITE_PUBLIC_SENTRY_DSN` | |
-| `VITE_PUBLIC_SENTRY_ENVIRONMENT` | defaults to Vercel's `VITE_VERCEL_ENV`, then Vite's mode |
-| `VITE_PUBLIC_SENTRY_RELEASE` | defaults to Vercel's `VITE_VERCEL_GIT_COMMIT_SHA` |
-| `VITE_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | 0–1, defaults to `0.05` |
+
+In both projects, turn off storing IP addresses: PostHog **Settings → Project → Discard client IP
+data**, and Sentry **Settings → Projects → (project) → Security & Privacy → Prevent Storing of IP
+Addresses**.
 
 ## Deploy on Vercel
 
@@ -220,12 +194,7 @@ This repo is configured for [Vercel](https://vercel.com) as a static Vite SPA (`
    |---|---|
    | `VITE_GLIFIC_API_URL` | `https://api.your-org.glific.com/api` |
    | `VITE_WEB_SOCKET` | `wss://api.your-org.glific.com/web_socket` |
-   | `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN` | optional — see [Analytics and error monitoring](#analytics-and-error-monitoring) |
-   | `VITE_PUBLIC_POSTHOG_HOST` | optional, e.g. `https://us.i.posthog.com` |
-   | `VITE_PUBLIC_SENTRY_DSN` | optional |
-   | `VITE_PUBLIC_SENTRY_ENVIRONMENT` | optional, defaults to `VITE_VERCEL_ENV` |
-   | `VITE_PUBLIC_SENTRY_RELEASE` | optional, defaults to `VITE_VERCEL_GIT_COMMIT_SHA` |
-   | `VITE_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | optional, defaults to `0.05` |
+   | `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN`, `VITE_PUBLIC_POSTHOG_HOST`, `VITE_PUBLIC_SENTRY_DSN` | optional — see [Analytics and error monitoring](#analytics-and-error-monitoring) |
 
    Apply them to **Production** (and Preview if previews should hit a real backend).
 4. Deploy. Client-side routes (`/login`, `/chat`) are rewritten to `index.html` so hard refreshes work.
@@ -253,9 +222,6 @@ src/
   lib/
     whatsapp.tsx             # safe WhatsApp-markup -> JSX + time formatting
     utils.ts                 # shadcn cn()
-    analytics.ts             # PostHog, lazy and optional (see "Analytics and error monitoring")
-    monitoring.ts            # Sentry, lazy and optional
-    scrub.ts                 # what is removed from Sentry reports
   App.tsx                    # routes (/login, /chat)
   main.tsx                   # resolves branding, then mounts BrowserRouter
 e2e/                         # Playwright journeys (see "End-to-end tests")

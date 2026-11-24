@@ -1,8 +1,5 @@
 import axios from 'axios';
 
-import { resetAnalytics } from '@/lib/analytics';
-import { clearMonitoringUser } from '@/lib/monitoring';
-
 import { WEB_CHANNEL_RENEW_TOKEN, WEB_CHANNEL_REQUEST_OTP, WEB_CHANNEL_VERIFY_OTP } from '@/config';
 
 const WEB_CHANNEL_SESSION_KEY = 'web_channel_session';
@@ -36,12 +33,8 @@ export const getWebChannelContact = (): { contactId: number | string; name?: str
   return { contactId: session.contactId, name: session.name, phone: session.phone };
 };
 
-// Every way a session ends comes through here — logging out, expiry, a refused renewal — so this
-// is also where analytics and error monitoring forget the contact.
 export const clearWebChannelSession = (): void => {
   localStorage.removeItem(WEB_CHANNEL_SESSION_KEY);
-  resetAnalytics();
-  clearMonitoringUser();
 };
 
 // Always 200 when the org is enabled, whether or not the number is known and whether or not

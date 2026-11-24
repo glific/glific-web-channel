@@ -11,8 +11,6 @@ import { OtpInput } from '@/components/auth/OtpInput';
 import { getBranding } from '@/services/branding';
 import { WEB_CHANNEL_OTP_RESEND_SECONDS } from '@/config';
 import { cn } from '@/lib/utils';
-import { identifyContact, track } from '@/lib/analytics';
-import { setMonitoringUser } from '@/lib/monitoring';
 import {
   requestOtp,
   verifyOtp,
@@ -136,12 +134,8 @@ export const Login = () => {
     setNotice('');
     setLoading(true);
     requestOtp(number)
-      .then(() => {
-        track('otp_requested');
-        goToOtpStep(number);
-      })
+      .then(() => goToOtpStep(number))
       .catch((requestError) => {
-        track('otp_request_failed', { status: webChannelErrorStatus(requestError) ?? 0 });
         // A 429 means a code was ALREADY sent, not that sending failed. Holding the user here
         // would leave a live code in their WhatsApp with nowhere to type it.
         if (webChannelErrorStatus(requestError) === 429) {
@@ -161,14 +155,10 @@ export const Login = () => {
     setResending(true);
     requestOtp(phone)
       .then(() => {
-        track('otp_requested', { resend: true });
         setResendIn(WEB_CHANNEL_OTP_RESEND_SECONDS);
         setNotice('We have sent another code to your WhatsApp.');
       })
-      .catch((requestError) => {
-        track('otp_request_failed', { status: webChannelErrorStatus(requestError) ?? 0, resend: true });
-        setError(webChannelErrorMessage(requestError));
-      })
+      .catch((requestError) => setError(webChannelErrorMessage(requestError)))
       .finally(() => setResending(false));
   };
 
@@ -191,15 +181,9 @@ export const Login = () => {
       .then(({ data }) => {
         const { token, contact_id: contactId, name } = data?.data ?? {};
         setWebChannelSession({ token, contactId, name, phone });
-        identifyContact(contactId);
-        setMonitoringUser(contactId);
-        track('otp_verified');
         navigate('/chat');
       })
-      .catch((verifyError) => {
-        track('otp_verify_failed', { status: webChannelErrorStatus(verifyError) ?? 0 });
-        setError(webChannelErrorMessage(verifyError));
-      })
+      .catch((verifyError) => setError(webChannelErrorMessage(verifyError)))
       .finally(() => setLoading(false));
   };
 
