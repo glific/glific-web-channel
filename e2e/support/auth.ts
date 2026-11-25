@@ -12,7 +12,7 @@ export const REQUEST_OTP_ROUTE = '**/api/v1/web_channel/request-otp';
 export const VERIFY_OTP_ROUTE = '**/api/v1/web_channel/verify-otp';
 
 /** A number that clears the client-side format check, so the server is what answers. */
-export const TEST_PHONE = '919820198765';
+export const TEST_PHONE = '919999999999';
 
 /** The prefix the form carries by default, and the half of TEST_PHONE it accounts for. */
 export const TEST_COUNTRY_CODE = '+91';

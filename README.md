@@ -162,6 +162,23 @@ mix run -e '
 Runs are serial with retries off, because the backend throttles a phone to one OTP per 30 seconds
 and a retry would fail on the throttle rather than on whatever went wrong.
 
+## Analytics and error monitoring
+
+PostHog (web analytics) and Sentry (error monitoring) start only when their keys are set, and are
+loaded as separate chunks, so a build without keys downloads neither. The app sends no custom
+events. PostHog runs with autocapture, session replay and exception capture on (replay also needs
+recording turned on in the PostHog project); Sentry runs with `sendDefaultPii: false`.
+
+| Variable | |
+|---|---|
+| `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN` | the web channel's own PostHog project |
+| `VITE_PUBLIC_POSTHOG_HOST` | defaults to `https://us.i.posthog.com` |
+| `VITE_PUBLIC_SENTRY_DSN` | |
+
+In both projects, turn off storing IP addresses: PostHog **Settings → Project → Discard client IP
+data**, and Sentry **Settings → Projects → (project) → Security & Privacy → Prevent Storing of IP
+Addresses**.
+
 ## Deploy on Vercel
 
 This repo is configured for [Vercel](https://vercel.com) as a static Vite SPA (`vercel.json`).
@@ -177,6 +194,7 @@ This repo is configured for [Vercel](https://vercel.com) as a static Vite SPA (`
    |---|---|
    | `VITE_GLIFIC_API_URL` | `https://api.your-org.glific.com/api` |
    | `VITE_WEB_SOCKET` | `wss://api.your-org.glific.com/web_socket` |
+   | `VITE_PUBLIC_POSTHOG_PROJECT_TOKEN`, `VITE_PUBLIC_POSTHOG_HOST`, `VITE_PUBLIC_SENTRY_DSN` | optional — see [Analytics and error monitoring](#analytics-and-error-monitoring) |
 
    Apply them to **Production** (and Preview if previews should hit a real backend).
 4. Deploy. Client-side routes (`/login`, `/chat`) are rewritten to `index.html` so hard refreshes work.
