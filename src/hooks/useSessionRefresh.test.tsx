@@ -86,7 +86,7 @@ describe('useSessionRefresh', () => {
     renderWithSession(expiring);
 
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: expiring })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: expiring }, { timeout: undefined })
     );
     // the fresh token replaces the old one; the contact identity survives
     await waitFor(() => expect(getWebChannelSession()?.token).toBe(fresh));
@@ -120,7 +120,7 @@ describe('useSessionRefresh', () => {
     });
 
     await waitFor(() =>
-      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: expiring })
+      expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: expiring }, { timeout: undefined })
     );
   });
 

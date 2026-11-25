@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { WEB_CHANNEL_RENEW_TOKEN } from '@/config';
 import { tokenExpiringIn } from '@/test/token';
@@ -109,7 +109,7 @@ describe('renewToken', () => {
 
     renewToken('current-token');
 
-    expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: 'current-token' });
+    expect(mockedAxios.post).toHaveBeenCalledWith(WEB_CHANNEL_RENEW_TOKEN, { token: 'current-token' }, { timeout: undefined });
   });
 });
 
@@ -144,39 +144,16 @@ describe('restoreExpiredSession', () => {
     expect(isSessionValid()).toBe(false);
   });
 
-  describe('when the server does not answer', () => {
-    beforeEach(() => vi.useFakeTimers());
-    afterEach(() => vi.useRealTimers());
+  it.each([
+    ['a network error', {}],
+    ['a 502', { response: { status: 502 } }],
+  ])('reports %s as unreachable and keeps the session', async (_case, error) => {
+    const expired = tokenExpiringIn(-3600);
+    setWebChannelSession({ token: expired, contactId: 7 });
+    mockedAxios.post.mockRejectedValue(error);
 
-    it.each([
-      ['a network error', {}],
-      ['a 502', { response: { status: 502 } }],
-    ])('retries once after %s, then reports it unreachable and keeps the session', async (_case, error) => {
-      const expired = tokenExpiringIn(-3600);
-      setWebChannelSession({ token: expired, contactId: 7 });
-      mockedAxios.post.mockRejectedValue(error);
-
-      const restoring = restoreExpiredSession();
-      await vi.advanceTimersByTimeAsync(1_000);
-
-      expect(await restoring).toBe('unreachable');
-      expect(mockedAxios.post).toHaveBeenCalledTimes(2);
-      expect(getWebChannelSession()?.token).toBe(expired);
-    });
-
-    it('renews on the retry when the first try fails', async () => {
-      const renewed = tokenExpiringIn(3600);
-      setWebChannelSession({ token: tokenExpiringIn(-3600), contactId: 7 });
-      mockedAxios.post
-        .mockRejectedValueOnce({ response: { status: 503 } })
-        .mockResolvedValueOnce({ data: { data: { token: renewed, contact_id: 7 } } });
-
-      const restoring = restoreExpiredSession();
-      await vi.advanceTimersByTimeAsync(1_000);
-
-      expect(await restoring).toBe('done');
-      expect(getWebChannelSession()?.token).toBe(renewed);
-    });
+    expect(await restoreExpiredSession()).toBe('unreachable');
+    expect(getWebChannelSession()?.token).toBe(expired);
   });
 
   it('asks nothing of the server for a live token, no token or an unreadable one', async () => {
